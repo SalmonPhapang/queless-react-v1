@@ -131,12 +131,13 @@ Paystack secret keys in `EXPO_PUBLIC_*`, Vercel, or EAS client variables.
 
 ## Capitec Pay
 
-Capitec Pay is a separate option at checkout and uses the same Paystack hosted
-checkout as card/Instant EFT. Enable it in the Paystack dashboard under
-**Settings > Preferences > Payments > Accept payments via** and complete any
-required KYC approval; the app does not force an undocumented init channel.
-The customer selects Capitec Pay on the Paystack page and approves the request
-in the Capitec app.
+Capitec Pay is a separate option at checkout. `initialize-paystack-split`
+initializes the Paystack transaction with `channels: ["capitec_pay"]`, so the
+returned authorization URL opens Capitec Pay directly instead of the generic
+method-selection checkout. Card / Instant EFT use `channels: ["card", "eft"]`.
+Enable Capitec Pay in the Paystack dashboard under **Settings > Preferences >
+Payments > Accept payments via** and complete any required KYC approval.
+The customer approves the request in the Capitec app.
 
 Approval is asynchronous. After returning from Paystack, the app verifies the
 transaction and, for Capitec Pay only, waits at least 90 seconds before the

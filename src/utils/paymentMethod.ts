@@ -1,8 +1,8 @@
 import { PaymentMethodType } from '../models/payment';
 
 /**
- * The three choices shown in Checkout. Capitec Pay and card/Instant EFT both
- * use the Paystack hosted checkout; COD is settled locally.
+ * The three choices shown in Checkout. Card/Instant EFT use Paystack Checkout,
+ * Capitec Pay uses a Capitec-only authorization URL, and COD is settled locally.
  */
 export type CheckoutPaymentMethod = 'card' | 'capitecPay' | 'cashOnDelivery';
 
