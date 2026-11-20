@@ -93,6 +93,44 @@ values from `.env.example`; Production sets `EXPO_PUBLIC_APP_ENV=prod`, while
 Preview and Development use `dev`. Existing Vercel Authentication/deployment
 protection settings are unchanged.
 
+## EAS builds and Paystack keys
+
+EAS build profiles are mapped to Expo Services environments in `eas.json`:
+
+| Profile | EAS environment | `EXPO_PUBLIC_APP_ENV` |
+| --- | --- | --- |
+| `development` | `development` | `dev` |
+| `preview` | `preview` | `dev` |
+| `production` | `production` | `prod` |
+
+The value is stored as a project-wide EAS environment variable. If it ever
+needs to be recreated:
+
+```bash
+eas env:set --name EXPO_PUBLIC_APP_ENV --value dev --environment development --visibility plaintext --scope project
+eas env:set --name EXPO_PUBLIC_APP_ENV --value dev --environment preview --visibility plaintext --scope project
+eas env:set --name EXPO_PUBLIC_APP_ENV --value prod --environment production --visibility plaintext --scope project
+```
+
+Paystack secret keys belong **only** in Supabase Edge Function secrets:
+
+- `PAYSTACK_SECRET_KEY` — live secret key, used when `EXPO_PUBLIC_APP_ENV=prod`.
+- `PAYSTACK_TEST_SECRET_KEY` — test secret key, used for dev/preview builds.
+  `PAYSTACK_SECRET_KEY_TEST` is accepted as a legacy alias.
+- `PAYSTACK_CALLBACK_URL` — optional; defaults to the deployed
+  `paystack-callback` function URL.
+
+The client sends `is_debug: appConfig.env !== 'prod'` to
+`initialize-paystack-split` and `verify-paystack-split`. Those functions pick
+the matching key and now fail closed when a debug request has no test key
+configured, so a test checkout can never silently use the live key. Do not put
+Paystack secret keys in `EXPO_PUBLIC_*`, Vercel, or EAS client variables.
+
+Because development and production currently share one Supabase project, the
+mode is request-driven and `paystack-webhook` accepts signatures from both
+keys. For high-value release traffic, use separate Supabase projects for dev
+and prod so only the correct key exists in each project.
+
 ## Checks
 
 ```bash
