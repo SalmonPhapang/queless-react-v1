@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -191,6 +192,22 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     }
 
     setLoading(true);
+
+    // Open the payment window from the Pay now tap so popup blockers allow it.
+    // Its destination is set once the payment request has been created. If the
+    // popup is blocked, the request screen offers a retry link instead.
+    let paymentWindow: Window | null = null;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      paymentWindow = window.open('about:blank', '_blank');
+      if (paymentWindow) {
+        try {
+          paymentWindow.opener = null;
+        } catch {
+          // Some browsers lock opener; the request is still usable.
+        }
+      }
+    }
+
     try {
       const items: OrderItem[] = cart.items.map((item) => ({
         productId: item.productId,
@@ -264,14 +281,26 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       //    only cleared once the payment is verified as successful.
       const paystack = await paymentService.initializePaystackPayment(payment.id);
 
+      if (paymentWindow && !paymentWindow.closed) {
+        try {
+          paymentWindow.location.href = paystack.authorizationUrl;
+          paymentWindow.focus();
+        } catch {
+          paymentWindow.close();
+          paymentWindow = null;
+        }
+      }
+
       navigation.replace('PaystackPayment', {
         orderId: order.id,
         paymentId: payment.id,
         reference: paystack.reference || payment.reference,
         authorizationUrl: paystack.authorizationUrl,
         paymentMethod,
+        amount: order.total,
       });
     } catch (e: any) {
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       setStatusMessage(e?.message || 'We could not place your order. Your cart is still saved.');
     } finally {
       setLoading(false);

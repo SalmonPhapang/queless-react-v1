@@ -3,10 +3,10 @@ import {
   View,
   StyleSheet,
   ActivityIndicator,
+  ScrollView,
   Text,
   Platform,
   TouchableOpacity,
-  Linking,
   Animated,
   Easing,
   BackHandler,
@@ -20,89 +20,216 @@ import { appConfig } from '../../config/appConfig';
 import { paymentService } from '../../services/paymentService';
 import { cartService } from '../../services/cartService';
 import { Header } from '../../components/Header';
-import { needsApprovalPolling } from '../../utils/paymentMethod';
+import { getPaymentPollingPlan, needsApprovalPolling } from '../../utils/paymentMethod';
 
-type PaymentPhase = 'gateway' | 'verifying' | 'success' | 'failed';
+type PaymentPhase = 'gateway' | 'waiting' | 'success' | 'failed';
 
-const VerifyingState: React.FC<{ message?: string; onCancel?: () => void }> = ({ message, onCancel }) => {
+const formatCountdown = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes} min ${remainder.toString().padStart(2, '0')} sec`;
+};
+
+const RequestSentState: React.FC<{
+  message: string;
+  waitingLabel: string;
+  methodLabel: string;
+  isCapitecPay: boolean;
+  amount?: number;
+  reference?: string;
+  onOpenRequest?: () => void;
+}> = ({ message, waitingLabel, methodLabel, isCapitecPay, amount, reference, onOpenRequest }) => {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const pulse = useRef(new Animated.Value(0.85)).current;
-  const rotate = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0.9)).current;
+  const float = useRef(new Animated.Value(0)).current;
+  const [remainingSeconds, setRemainingSeconds] = useState(300);
 
   useEffect(() => {
     const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
-          toValue: 1.1,
-          duration: 900,
+          toValue: 1.08,
+          duration: 1000,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(pulse, {
-          toValue: 0.85,
-          duration: 900,
+          toValue: 0.9,
+          duration: 1000,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
       ])
     );
-    const rotateLoop = Animated.loop(
-      Animated.timing(rotate, {
-        toValue: 1,
-        duration: 1600,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, {
+          toValue: -6,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(float, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
     );
     pulseLoop.start();
-    rotateLoop.start();
+    floatLoop.start();
+
+    const timer = setInterval(() => {
+      setRemainingSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
     return () => {
       pulseLoop.stop();
-      rotateLoop.stop();
+      floatLoop.stop();
+      clearInterval(timer);
     };
-  }, [pulse, rotate]);
+  }, [pulse, float]);
 
-  const spin = rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const steps = isCapitecPay
+    ? [
+        { title: 'Open your Capitec app', body: 'Tap the push notification, or open the app.' },
+        { title: 'Approve payment', body: 'Confirm the request on the confirmation screen.' },
+        { title: 'We’ll finish the rest', body: 'This screen updates as soon as payment is approved.' },
+      ]
+    : [
+        { title: 'Open the payment window', body: 'We opened a secure window for your payment.' },
+        { title: 'Complete payment', body: 'Use your card or Instant EFT.' },
+        { title: 'We’ll finish the rest', body: 'This screen updates as soon as payment is complete.' },
+      ];
 
   return (
-    <View style={[styles.stateScreen, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
-      <View style={styles.animationWrap}>
-        <Animated.View
+    <View style={[styles.stateScreen, { backgroundColor: colors.surface }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.stateContent,
+          { paddingTop: insets.top, paddingBottom: insets.bottom },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.requestAnimation}>
+          <Animated.View
+            style={[
+              styles.pulseRing,
+              {
+                backgroundColor: colors.primaryContainer,
+                transform: [{ scale: pulse }],
+                opacity: 0.75,
+              },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.iconBadge,
+              {
+                backgroundColor: colors.cardBackground,
+                borderColor: colors.divider,
+                transform: [{ translateY: float }],
+              },
+            ]}
+          >
+            <Ionicons name="paper-plane-outline" size={38} color={colors.secondary} />
+          </Animated.View>
+        </View>
+
+        <Text style={[typography.headlineSmall, { color: colors.onSurface, marginTop: 18, fontWeight: '700' }]}>
+          Request sent
+        </Text>
+        <Text
           style={[
-            styles.pulseRing,
-            {
-              backgroundColor: colors.primaryContainer,
-              transform: [{ scale: pulse }],
-              opacity: 0.7,
-            },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.iconBadge,
-            { backgroundColor: colors.cardBackground, borderColor: colors.divider, transform: [{ rotate: spin }] },
+            typography.bodyMedium,
+            { color: colors.subtext, marginTop: 8, textAlign: 'center', lineHeight: 22 },
           ]}
         >
-          <Ionicons name="sync" size={34} color={colors.secondary} />
-        </Animated.View>
-      </View>
-      <Text style={[typography.headlineSmall, { color: colors.onSurface, marginTop: 20, fontWeight: '700' }]}>
-        Verifying payment
-      </Text>
-      <Text style={[typography.bodyMedium, { color: colors.subtext, marginTop: 8, textAlign: 'center' }]}>
-        {message || 'Please wait while we confirm your payment…'}
-      </Text>
-      <ActivityIndicator size="small" color={colors.secondary} style={{ marginTop: 18 }} />
-      {onCancel && (
-        <TouchableOpacity
-          style={[styles.cancelAction, { borderColor: colors.divider }]}
-          onPress={onCancel}
-          activeOpacity={0.85}
+          {message}
+        </Text>
+
+        <View
+          style={[
+            styles.countdownPill,
+            { backgroundColor: colors.cardBackground, borderColor: colors.divider },
+          ]}
         >
-          <Text style={[typography.labelMedium, { color: colors.subtext }]}>Back to checkout</Text>
-        </TouchableOpacity>
-      )}
+          <Ionicons name="time-outline" size={16} color={colors.secondary} style={{ marginRight: 8 }} />
+          <Text style={[typography.labelMedium, { color: colors.onSurface }]}>
+            You have {formatCountdown(remainingSeconds)} {isCapitecPay ? 'to approve' : 'to complete'}
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.requestCard,
+            { backgroundColor: colors.cardBackground, borderColor: colors.divider },
+          ]}
+        >
+          <View style={styles.requestRow}>
+            <Text style={[typography.bodyMedium, { color: colors.subtext }]}>Order total</Text>
+            <Text style={[typography.titleSmall, { color: colors.onSurface, fontWeight: '700' }]}>
+              {amount === undefined ? '—' : appConfig.formatCurrency(amount)}
+            </Text>
+          </View>
+          <View style={styles.requestRow}>
+            <Text style={[typography.bodyMedium, { color: colors.subtext }]}>Payment</Text>
+            <Text style={[typography.bodyMedium, { color: colors.onSurface }]}>{methodLabel}</Text>
+          </View>
+          {reference ? (
+            <View style={styles.requestRow}>
+              <Text style={[typography.bodyMedium, { color: colors.subtext }]}>Reference</Text>
+              <Text style={[typography.bodyMedium, { color: colors.onSurface }]}>
+                {reference.slice(-6).toUpperCase()}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.stepsBlock}>
+          {steps.map((step, index) => (
+            <View style={styles.stepRow} key={step.title}>
+              <View style={[styles.stepNumber, { backgroundColor: colors.secondary }]}>
+                <Text style={[typography.labelMedium, { color: '#FFFFFF', fontWeight: '700' }]}>
+                  {index + 1}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[typography.titleSmall, { color: colors.onSurface }]}>{step.title}</Text>
+                <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 2 }]}>
+                  {step.body}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.waitingRow}>
+          <View style={[styles.statusDot, { backgroundColor: colors.secondary }]} />
+          <Text style={[typography.labelMedium, { color: colors.subtext }]}>{waitingLabel}</Text>
+        </View>
+
+        {isCapitecPay && (
+          <View style={styles.fallbackBox}>
+            <Text style={[typography.labelMedium, { color: colors.onSurface }]}>
+              Didn’t receive the notification?
+            </Text>
+            <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 4, lineHeight: 19 }]}>
+              1. Sign in to your Capitec app{'\n'}2. Tap Transact{'\n'}3. Tap Capitec Pay and approve the payment
+            </Text>
+          </View>
+        )}
+
+        {onOpenRequest && (
+          <TouchableOpacity style={styles.textAction} onPress={onOpenRequest} activeOpacity={0.8}>
+            <Text style={[typography.bodySmall, { color: colors.secondary }]}>
+              Didn’t see the payment window? Open it again
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
     </View>
   );
 };
@@ -121,7 +248,12 @@ const SuccessState: React.FC<{ onTrackOrder: () => void }> = ({ onTrackOrder }) 
   }, [scale, opacity]);
 
   return (
-    <View style={[styles.stateScreen, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.stateScreen,
+        { backgroundColor: colors.surface, paddingTop: insets.top, paddingBottom: insets.bottom },
+      ]}
+    >
       <Animated.View style={[styles.successCircle, { backgroundColor: colors.secondary, transform: [{ scale }], opacity }]}>
         <Ionicons name="checkmark" size={46} color="#FFFFFF" />
       </Animated.View>
@@ -143,15 +275,29 @@ const SuccessState: React.FC<{ onTrackOrder: () => void }> = ({ onTrackOrder }) 
   );
 };
 
-const FailedState: React.FC<{ title: string; message: string; onBack: () => void }> = ({ title, message, onBack }) => {
+const FailedState: React.FC<{ title: string; message: string; onTryAgain: () => void }> = ({
+  title,
+  message,
+  onTryAgain,
+}) => {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.stateScreen, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.stateScreen,
+        { backgroundColor: colors.surface, paddingTop: insets.top, paddingBottom: insets.bottom },
+      ]}
+    >
       <View style={[styles.successCircle, { backgroundColor: '#F59E0B' }]}>
         <Ionicons name="alert" size={42} color="#FFFFFF" />
       </View>
-      <Text style={[typography.headlineSmall, { color: colors.onSurface, marginTop: 20, fontWeight: '700', textAlign: 'center' }]}>
+      <Text
+        style={[
+          typography.headlineSmall,
+          { color: colors.onSurface, marginTop: 20, fontWeight: '700', textAlign: 'center' },
+        ]}
+      >
         {title}
       </Text>
       <Text style={[typography.bodyMedium, { color: colors.subtext, marginTop: 8, textAlign: 'center' }]}>
@@ -159,10 +305,10 @@ const FailedState: React.FC<{ title: string; message: string; onBack: () => void
       </Text>
       <TouchableOpacity
         style={[styles.primaryAction, { backgroundColor: colors.secondary }]}
-        onPress={onBack}
+        onPress={onTryAgain}
         activeOpacity={0.85}
       >
-        <Text style={[typography.labelLarge, { color: '#FFFFFF', fontWeight: '700' }]}>Back to checkout</Text>
+        <Text style={[typography.labelLarge, { color: '#FFFFFF', fontWeight: '700' }]}>Try again</Text>
       </TouchableOpacity>
     </View>
   );
@@ -173,8 +319,13 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   route,
 }) => {
   const { colors, typography } = useTheme();
-  const { authorizationUrl, reference, paymentId, orderId, paymentMethod } = route.params || {};
+  const { authorizationUrl, reference, orderId, paymentId, paymentMethod, amount } = route.params || {};
   const isCapitecPay = needsApprovalPolling(paymentMethod);
+  const methodLabel = isCapitecPay ? 'Capitec Pay' : 'Card / Instant EFT';
+  const waitingLabel = isCapitecPay ? 'Waiting for approval…' : 'Waiting for confirmation…';
+  const defaultRequestMessage = isCapitecPay
+    ? 'We’ve sent a request to your Capitec app. Approve it there and we’ll confirm your order automatically.'
+    : 'We’ve opened a secure payment window. Complete it there and we’ll confirm your order automatically.';
 
   // The Supabase callback returns raw HTML, so it must be cancelled before the
   // WebView commits the navigation. It still needs to pass the whitelist so
@@ -189,36 +340,36 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   // react-native-webview checks originWhitelist BEFORE onShouldStartLoadWithRequest
   // and otherwise tries to open the URL externally. The callback must pass the
   // whitelist so our interceptor can cancel it and start verification; it is
-  // never actually loaded (see shouldStartLoadWithRequest below).
+  // never actually loaded.
   const webViewOrigins = [
     ...(callbackOrigin ? [callbackOrigin] : []),
     'https://*',
     'http://*',
   ];
 
-  const [phase, setPhase] = useState<PaymentPhase>('gateway');
+  const [phase, setPhase] = useState<PaymentPhase>(Platform.OS === 'web' ? 'waiting' : 'gateway');
+  const [requestMessage, setRequestMessage] = useState(defaultRequestMessage);
   const [failTitle, setFailTitle] = useState('Payment not completed');
   const [failMessage, setFailMessage] = useState('');
-  const [verifyMessage, setVerifyMessage] = useState<string | undefined>(undefined);
-  const [awaitingApproval, setAwaitingApproval] = useState(false);
-  const handled = useRef(false);
+  const verificationStarted = useRef(false);
   const navigatingAway = useRef(false);
   const overlayOpacity = useRef(new Animated.Value(0)).current;
 
-  // Capitec Pay is approved in the banking app, so Paystack can confirm it
-  // after the customer returns. The docs recommend waiting 90s before the
-  // first requery and never polling faster than 10s.
+  // Capitec Pay requeries must start ~90s after the request was sent and stay
+  // at least 10s apart. The screen opens when the request is created, so this
+  // timestamp is the earliest safe check time.
   const startedAtRef = useRef(Date.now());
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollAttemptsRef = useRef(0);
   const pollCancelledRef = useRef(false);
+  const checkPaymentRef = useRef<() => Promise<void>>(async () => {});
 
-  const clearPollTimer = () => {
+  const clearPollTimer = useCallback(() => {
     if (pollTimerRef.current) {
       clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -265,17 +416,25 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
 
   const failVerification = (title: string, message: string) => {
     clearPollTimer();
-    handled.current = false;
-    setAwaitingApproval(false);
+    verificationStarted.current = false;
     setFailTitle(title);
     setFailMessage(message);
     setPhase('failed');
   };
 
+  const scheduleCheck = (delayMs: number) => {
+    clearPollTimer();
+    pollTimerRef.current = setTimeout(() => {
+      void checkPaymentRef.current();
+    }, Math.max(1_000, delayMs));
+  };
+
   // verify-paystack-split also requeries Capitec Pay, so this single check
-  // covers both Paystack's transaction status and the Capitec approval status.
+  // covers both transaction status and Capitec approval status.
   const checkPayment = async () => {
     if (!paymentId || pollCancelledRef.current) return;
+
+    const plan = getPaymentPollingPlan(paymentMethod, Date.now() - startedAtRef.current);
 
     try {
       const result = await paymentService.verifyPaystackPayment(paymentId, reference);
@@ -286,60 +445,54 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
         return;
       }
 
-      const maxAttempts = 30; // 10s minimum interval => up to ~5 minutes total
-      if (isCapitecPay && pollAttemptsRef.current < maxAttempts) {
-        pollAttemptsRef.current += 1;
-        // First check happens 90s after opening checkout; later checks are 10s apart.
-        const elapsed = Date.now() - startedAtRef.current;
-        const delay = Math.max(10_000, 90_000 - elapsed);
-        setAwaitingApproval(true);
-        setVerifyMessage('Waiting for approval in your Capitec app…');
-        pollTimerRef.current = setTimeout(() => {
-          void checkPayment();
-        }, delay);
+      if (pollAttemptsRef.current >= plan.maxAttempts) {
+        failVerification(
+          'Payment not completed',
+          'We have not confirmed this payment yet. Your cart is saved — you can try again.'
+        );
         return;
       }
 
-      failVerification(
-        'Payment not completed',
-        'We have not confirmed this payment yet. Your cart is saved — you can try again.'
+      pollAttemptsRef.current += 1;
+      setRequestMessage(
+        isCapitecPay ? 'Still waiting for your approval…' : 'We’re checking again in a moment…'
       );
+      scheduleCheck(plan.intervalMs);
     } catch (e: any) {
-      failVerification(
-        'Could not verify payment',
-        e?.message ||
-          'We could not confirm the payment. Your cart is saved — check your Orders tab before paying again.'
-      );
+      if (pollAttemptsRef.current >= plan.maxAttempts) {
+        failVerification(
+          'Could not verify payment',
+          e?.message ||
+            'We could not confirm the payment. Your cart is saved — check your Orders tab before paying again.'
+        );
+        return;
+      }
+
+      pollAttemptsRef.current += 1;
+      setRequestMessage('We’re still checking — please keep this screen open.');
+      scheduleCheck(plan.intervalMs);
     }
   };
+  checkPaymentRef.current = checkPayment;
 
-  const finishPayment = async () => {
-    if (handled.current || !paymentId) return;
-    handled.current = true;
+  const startVerification = () => {
+    if (verificationStarted.current || !paymentId) return;
+    verificationStarted.current = true;
     pollCancelledRef.current = false;
     pollAttemptsRef.current = 0;
-    // Cover the WebView synchronously so the callback HTML never flashes.
     overlayOpacity.setValue(1);
-    setPhase('verifying');
-    setVerifyMessage(undefined);
-    setAwaitingApproval(false);
-    await checkPayment();
-  };
+    setPhase('waiting');
+    setRequestMessage(defaultRequestMessage);
 
-  const cancelWaiting = () => {
-    pollCancelledRef.current = true;
-    clearPollTimer();
-    handled.current = false;
-    setAwaitingApproval(false);
-    navigatingAway.current = true;
-    navigation.goBack();
+    const plan = getPaymentPollingPlan(paymentMethod, Date.now() - startedAtRef.current);
+    scheduleCheck(plan.firstDelayMs);
   };
 
   // Block the callback navigation itself: returning false stops the WebView
-  // from rendering Paystack's raw callback/response HTML at all.
+  // from rendering the raw callback/response HTML at all.
   const shouldStartLoadWithRequest = (request: { url?: string }) => {
     if (isCallbackUrl(request?.url || '')) {
-      void finishPayment();
+      startVerification();
       return false;
     }
     return true;
@@ -347,41 +500,30 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
 
   const handleNavigationStateChange = (navState: any) => {
     if (isCallbackUrl(navState?.url)) {
-      void finishPayment();
+      startVerification();
     }
   };
 
-  const openGateway = async () => {
-    if (!authorizationUrl) return;
-    try {
-      const canOpen = await Linking.canOpenURL(authorizationUrl);
-      if (canOpen) {
-        await Linking.openURL(authorizationUrl);
-      } else if (typeof window !== 'undefined') {
-        window.open(authorizationUrl, '_blank', 'noopener,noreferrer');
-      }
-    } catch {
-      if (typeof window !== 'undefined') {
-        window.open(authorizationUrl, '_blank', 'noopener,noreferrer');
-      }
-    }
+  const openPaymentWindow = () => {
+    if (!authorizationUrl || typeof window === 'undefined') return;
+    window.open(authorizationUrl, '_blank', 'noopener,noreferrer');
   };
 
   useEffect(() => {
-    if (Platform.OS === 'web' && authorizationUrl && phase === 'gateway') {
-      void openGateway();
+    if (Platform.OS === 'web' && authorizationUrl) {
+      startVerification();
     }
+    // startVerification is intentionally keyed to the request identifiers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorizationUrl]);
+  }, [authorizationUrl, paymentId]);
 
-  // Do not let the hardware/browser back button expose the empty checkout
-  // behind a successful payment. Verification is also non-dismissible.
+  // The request is non-dismissible until it settles, so a back gesture can no
+  // longer expose the empty checkout behind it.
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event: any) => {
       if (navigatingAway.current) return;
-      if (phase === 'verifying') {
+      if (phase === 'waiting') {
         event.preventDefault();
-        if (awaitingApproval) cancelWaiting();
         return;
       }
       if (phase === 'success') {
@@ -390,16 +532,13 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
       }
     });
     return unsubscribe;
-  }, [navigation, phase, awaitingApproval]);
+  }, [navigation, phase]);
 
   useFocusEffect(
     useCallback(() => {
       if (Platform.OS === 'web') return undefined;
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-        if (phase === 'verifying') {
-          if (awaitingApproval) cancelWaiting();
-          return true;
-        }
+        if (phase === 'waiting') return true;
         if (phase === 'success') {
           navigateHome();
           return true;
@@ -407,23 +546,26 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
         return false;
       });
       return () => subscription.remove();
-    }, [phase, awaitingApproval])
+    }, [phase])
   );
 
   const onBack = () => navigation.goBack();
 
-  // State screens are fully opaque and rendered without the gateway header so
-  // no Paystack page/response text can show through while verifying.
-  if (phase === 'verifying') {
+  if (phase === 'waiting') {
     return (
-      <VerifyingState
-        message={verifyMessage}
-        onCancel={awaitingApproval ? cancelWaiting : undefined}
+      <RequestSentState
+        message={requestMessage}
+        waitingLabel={waitingLabel}
+        methodLabel={methodLabel}
+        isCapitecPay={isCapitecPay}
+        amount={amount}
+        reference={reference}
+        onOpenRequest={Platform.OS === 'web' ? openPaymentWindow : undefined}
       />
     );
   }
   if (phase === 'success') return <SuccessState onTrackOrder={goToTracking} />;
-  if (phase === 'failed') return <FailedState title={failTitle} message={failMessage} onBack={onBack} />;
+  if (phase === 'failed') return <FailedState title={failTitle} message={failMessage} onTryAgain={onBack} />;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
@@ -437,52 +579,26 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
         </View>
       )}
 
-      {Platform.OS === 'web' ? (
-        <View style={[styles.webNotice, { backgroundColor: colors.cardBackground }]}>
-          <Text style={[typography.titleMedium, { color: colors.onSurface }]}>Continue to secure checkout</Text>
-          <Text style={[typography.bodyMedium, { color: colors.subtext, marginTop: 8, textAlign: 'center' }]}>
-            We opened the secure checkout in a new tab. Complete your payment there, then return here and tap
-            Verify payment.
-          </Text>
-          <TouchableOpacity
-            style={[styles.verifyButton, { backgroundColor: colors.secondary }]}
-            onPress={openGateway}
-            disabled={!authorizationUrl}
-            activeOpacity={0.85}
-          >
-            <Text style={[typography.labelLarge, { color: '#FFFFFF', fontWeight: '700' }]}>Open checkout</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.verifyButton, { backgroundColor: colors.secondary, marginTop: 12 }]}
-            onPress={() => void finishPayment()}
-            disabled={!paymentId}
-            activeOpacity={0.85}
-          >
-            <Text style={[typography.labelLarge, { color: '#FFFFFF', fontWeight: '700' }]}>Verify payment</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={{ flex: 1 }}>
-          <PlatformWebView
-            source={{ uri: authorizationUrl || 'https://paystack.com' }}
-            originWhitelist={webViewOrigins}
-            setSupportMultipleWindows={false}
-            onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
-            onNavigationStateChange={handleNavigationStateChange}
-            startInLoadingState
-            renderLoading={() => (
-              <View style={[styles.loadingOverlay, { backgroundColor: colors.surface }]}>
-                <ActivityIndicator size="large" color={colors.secondary} />
-              </View>
-            )}
-            style={{ flex: 1 }}
-          />
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.verifyCover, { opacity: overlayOpacity, backgroundColor: colors.surface }]}
-          />
-        </View>
-      )}
+      <View style={{ flex: 1 }}>
+        <PlatformWebView
+          source={{ uri: authorizationUrl || 'about:blank' }}
+          originWhitelist={webViewOrigins}
+          setSupportMultipleWindows={false}
+          onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
+          onNavigationStateChange={handleNavigationStateChange}
+          startInLoadingState
+          renderLoading={() => (
+            <View style={[styles.loadingOverlay, { backgroundColor: colors.surface }]}>
+              <ActivityIndicator size="large" color={colors.secondary} />
+            </View>
+          )}
+          style={{ flex: 1 }}
+        />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.verifyCover, { opacity: overlayOpacity, backgroundColor: colors.surface }]}
+        />
+      </View>
     </View>
   );
 };
@@ -503,37 +619,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 99,
   },
-  webNotice: {
-    flex: 1,
-    margin: 24,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verifyButton: {
-    marginTop: 24,
-    height: 48,
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 180,
-  },
   capitecHint: {
     marginHorizontal: 20,
     marginTop: 12,
     borderRadius: 12,
     padding: 12,
-  },
-  cancelAction: {
-    marginTop: 16,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   verifyCover: {
     ...absoluteFill,
@@ -548,7 +638,12 @@ const styles = StyleSheet.create({
     zIndex: 999,
     elevation: 999,
   },
-  animationWrap: {
+  stateContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestAnimation: {
     width: 120,
     height: 120,
     alignItems: 'center',
@@ -567,6 +662,69 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  countdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  requestCard: {
+    width: '100%',
+    marginTop: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  requestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: 5,
+  },
+  stepsBlock: {
+    width: '100%',
+    marginTop: 18,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  stepNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  waitingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  fallbackBox: {
+    width: '100%',
+    marginTop: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(120,120,128,0.2)',
+    padding: 14,
+  },
+  textAction: {
+    marginTop: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   successCircle: {
     width: 96,

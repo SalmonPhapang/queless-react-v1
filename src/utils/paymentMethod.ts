@@ -36,3 +36,31 @@ export function toPaymentMethodCode(method: CheckoutPaymentMethod): PaymentMetho
 export function needsApprovalPolling(method: CheckoutPaymentMethod | undefined): boolean {
   return method === 'capitecPay';
 }
+
+export interface PaymentPollingPlan {
+  /** Delay before the first verification check. */
+  firstDelayMs: number;
+  /** Minimum gap between later checks. */
+  intervalMs: number;
+  /** Maximum number of checks before showing a failed state. */
+  maxAttempts: number;
+}
+
+/**
+ * Capitec Pay's docs require the first requery at ~90s and never faster than
+ * 10s. Other methods settle quickly, so they are checked sooner and more often.
+ */
+export function getPaymentPollingPlan(
+  method: CheckoutPaymentMethod | undefined,
+  elapsedMs = 0
+): PaymentPollingPlan {
+  if (needsApprovalPolling(method)) {
+    return {
+      firstDelayMs: Math.max(1_000, 90_000 - Math.max(0, elapsedMs)),
+      intervalMs: 10_000,
+      maxAttempts: 30,
+    };
+  }
+
+  return { firstDelayMs: 3_000, intervalMs: 5_000, maxAttempts: 60 };
+}

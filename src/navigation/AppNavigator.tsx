@@ -51,6 +51,7 @@ export type RootStackParamList = {
     orderId: string;
     paymentId: string;
     paymentMethod?: CheckoutPaymentMethod;
+    amount?: number;
   };
   OrderTracking: { orderId: string; fromCheckout?: boolean };
   AddressManagement: undefined;
