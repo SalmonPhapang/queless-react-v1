@@ -148,7 +148,27 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
 
   const handlePlaceOrder = async () => {
     setStatusMessage(null);
+
+    // Open the payment window synchronously from the Pay now tap so popup
+    // blockers allow it. Its destination is set once the request is created.
+    // If it is blocked, the request screen offers a retry link instead.
+    let paymentWindow: Window | null = null;
+    if (Platform.OS === 'web' && paymentMethod !== 'cashOnDelivery' && typeof window !== 'undefined') {
+      paymentWindow = window.open('about:blank', '_blank');
+      if (paymentWindow) {
+        try {
+          paymentWindow.opener = null;
+        } catch {
+          // Some browsers lock opener; the request is still usable.
+        }
+      }
+    }
+    const closePaymentWindow = () => {
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+    };
+
     if (!user) {
+      closePaymentWindow();
       setStatusMessage('Please sign in to place an order.');
       navigation.navigate('Auth');
       return;
@@ -167,16 +187,19 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     }
 
     if (currentStore?.isOpen === false) {
+      closePaymentWindow();
       setStatusMessage(currentStore.nextOpeningTime || 'This store is currently closed and will open soon.');
       return;
     }
 
     if (!selectedAddress) {
+      closePaymentWindow();
       setStatusMessage('Add a delivery address before placing this order.');
       navigation.navigate('AddressManagement');
       return;
     }
     if (!meetsMinimum || deliveryUnavailable) {
+      closePaymentWindow();
       setStatusMessage(
         deliveryUnavailable
           ? 'This store is too far away for delivery. Delivery is only available up to 20km.'
@@ -186,27 +209,13 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     }
 
     if (orderType === 'Liquor' && !user.ageVerified) {
+      closePaymentWindow();
       setStatusMessage('You need to verify your age before ordering alcohol.');
       navigation.navigate('AgeVerification');
       return;
     }
 
     setLoading(true);
-
-    // Open the payment window from the Pay now tap so popup blockers allow it.
-    // Its destination is set once the payment request has been created. If the
-    // popup is blocked, the request screen offers a retry link instead.
-    let paymentWindow: Window | null = null;
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      paymentWindow = window.open('about:blank', '_blank');
-      if (paymentWindow) {
-        try {
-          paymentWindow.opener = null;
-        } catch {
-          // Some browsers lock opener; the request is still usable.
-        }
-      }
-    }
 
     try {
       const items: OrderItem[] = cart.items.map((item) => ({
@@ -265,6 +274,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
 
       // Cash on delivery settles immediately.
       if (payment.status === 'completed') {
+        closePaymentWindow();
         await cartService.clearCart();
         // Drop Cart/Checkout from the stack so back from tracking goes Home.
         navigation.reset({
@@ -300,7 +310,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         amount: order.total,
       });
     } catch (e: any) {
-      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+      closePaymentWindow();
       setStatusMessage(e?.message || 'We could not place your order. Your cart is still saved.');
     } finally {
       setLoading(false);
