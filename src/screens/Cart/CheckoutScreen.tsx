@@ -336,10 +336,10 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
               <Ionicons name="card-outline" size={22} color={colors.secondary} style={{ marginRight: 12 }} />
               <View>
                 <Text style={[typography.titleSmall, { color: colors.onSurface }]}>
-                  Card or Instant EFT (Paystack)
+                  Card or Instant EFT
                 </Text>
                 <Text style={[typography.bodySmall, { color: colors.subtext }]}>
-                  Secured by Paystack SA
+                  Secure online payment
                 </Text>
               </View>
             </View>
@@ -368,7 +368,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                   Capitec Pay
                 </Text>
                 <Text style={[typography.bodySmall, { color: colors.subtext }]}>
-                  Approve in the Capitec app (Paystack)
+                  Approve in your Capitec app
                 </Text>
               </View>
             </View>

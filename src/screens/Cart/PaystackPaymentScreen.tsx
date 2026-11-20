@@ -91,7 +91,7 @@ const VerifyingState: React.FC<{ message?: string; onCancel?: () => void }> = ({
         Verifying payment
       </Text>
       <Text style={[typography.bodyMedium, { color: colors.subtext, marginTop: 8, textAlign: 'center' }]}>
-        {message || 'Please wait while we confirm your payment with Paystack…'}
+        {message || 'Please wait while we confirm your payment…'}
       </Text>
       <ActivityIndicator size="small" color={colors.secondary} style={{ marginTop: 18 }} />
       {onCancel && (
@@ -302,7 +302,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
 
       failVerification(
         'Payment not completed',
-        'Paystack has not confirmed this payment yet. Your cart is saved — you can try again.'
+        'We have not confirmed this payment yet. Your cart is saved — you can try again.'
       );
     } catch (e: any) {
       failVerification(
@@ -427,21 +427,21 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      <Header title={isCapitecPay ? 'Capitec Pay (Paystack)' : 'Paystack Secure Payment'} showBack onBackPress={onBack} />
+      <Header title={isCapitecPay ? 'Capitec Pay' : 'Secure Payment'} showBack onBackPress={onBack} />
 
       {isCapitecPay && (
         <View style={[styles.capitecHint, { backgroundColor: colors.cardBackground }]}>
           <Text style={[typography.bodySmall, { color: colors.subtext }]}>
-            Choose Capitec Pay on the Paystack page, then approve the request in your Capitec app.
+            Choose Capitec Pay, then approve the request in your Capitec app.
           </Text>
         </View>
       )}
 
       {Platform.OS === 'web' ? (
         <View style={[styles.webNotice, { backgroundColor: colors.cardBackground }]}>
-          <Text style={[typography.titleMedium, { color: colors.onSurface }]}>Continue on Paystack</Text>
+          <Text style={[typography.titleMedium, { color: colors.onSurface }]}>Continue to secure checkout</Text>
           <Text style={[typography.bodyMedium, { color: colors.subtext, marginTop: 8, textAlign: 'center' }]}>
-            We opened the Paystack checkout in a new tab. Complete your payment there, then return here and tap
+            We opened the secure checkout in a new tab. Complete your payment there, then return here and tap
             Verify payment.
           </Text>
           <TouchableOpacity
@@ -450,7 +450,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
             disabled={!authorizationUrl}
             activeOpacity={0.85}
           >
-            <Text style={[typography.labelLarge, { color: '#FFFFFF', fontWeight: '700' }]}>Open Paystack</Text>
+            <Text style={[typography.labelLarge, { color: '#FFFFFF', fontWeight: '700' }]}>Open checkout</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.verifyButton, { backgroundColor: colors.secondary, marginTop: 12 }]}

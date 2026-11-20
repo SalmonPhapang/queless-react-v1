@@ -161,12 +161,12 @@ export const paymentService = {
     });
 
     if (error) {
-      throw new PaymentError(error.message || 'Could not start the Paystack payment.');
+      throw new PaymentError(error.message || 'Could not start the payment.');
     }
     const response = data as Record<string, any> | null;
     if (!response?.status || !response?.data?.authorization_url) {
       throw new PaymentError(
-        response?.message || response?.error || 'Paystack did not return a checkout URL.'
+        response?.message || response?.error || 'We could not start the payment. Please try again.'
       );
     }
 
