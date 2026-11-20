@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "Queless",
+    "slug": "queless-react-v1",
+    "version": "1.0.1",
+    "scheme": "com.queless.app",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "web": {
+      "splash": {
+        "image": "./assets/icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0F0F11"
+      }
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.queless.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F0F11"
+      },
+      "package": "com.queless.app",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Queless uses your location to find nearby stores and calculate delivery fees."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0F0F11",
+          "image": "./assets/icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#D13540"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c7db493d-fb1e-46e9-92d1-270f51b14ea6"
+      }
+    }
+  }
+}
