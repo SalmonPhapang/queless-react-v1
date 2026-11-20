@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import { StatusMessage } from '../../components/StatusMessage';
 import { appConfig } from '../../config/appConfig';
 import { settlementCalculator } from '../../utils/settlementCalculator';
 import { formatAddress } from '../../utils/address';
+import { getStoreDistanceKm, isBeyondDeliveryRadius } from '../../utils/deliveryRadius';
 
 export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
@@ -38,6 +39,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
   const [codAllowed, setCodAllowed] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [store, setStore] = useState<Store | null>(null);
+  const [, setDistanceVersion] = useState(0);
 
   // Re-read the profile every time checkout regains focus, so an address added
   // or defaulted in AddressManagement is reflected here immediately.
@@ -96,6 +98,23 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     }, [])
   );
 
+  // Re-measure against the selected delivery address. The cart may have been
+  // filled while a different location was active; checkout must use the point
+  // that will actually be sent to the server geo guard.
+  useEffect(() => {
+    if (!store || !selectedAddress) return;
+
+    const coords =
+      Number.isFinite(selectedAddress.latitude) && Number.isFinite(selectedAddress.longitude)
+        ? { latitude: selectedAddress.latitude, longitude: selectedAddress.longitude }
+        : deliveryLocationService.getActive()?.coords;
+    const distanceKm = getStoreDistanceKm(store, coords);
+    if (distanceKm === undefined) return;
+
+    cartService.updateStoreContext(store.id, { distanceMeters: distanceKm * 1000 });
+    setDistanceVersion((version) => version + 1);
+  }, [store, selectedAddress]);
+
   if (!cart) return null;
 
   const storeContext = cartService.getStoreContext(cart.storeId);
@@ -103,7 +122,14 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
 
   const subtotal = cartService.calculateSubtotal();
   const deliveryFee = cartService.getDeliveryFee(cart.storeId);
-  const deliveryUnavailable = deliveryFee < 0;
+  const deliveryCoords =
+    selectedAddress &&
+    Number.isFinite(selectedAddress.latitude) &&
+    Number.isFinite(selectedAddress.longitude)
+      ? { latitude: selectedAddress.latitude, longitude: selectedAddress.longitude }
+      : deliveryLocationService.getActive()?.coords;
+  const deliveryDistanceKm = store ? getStoreDistanceKm(store, deliveryCoords) : undefined;
+  const deliveryUnavailable = deliveryFee < 0 || isBeyondDeliveryRadius(deliveryDistanceKm);
   const serviceFee = cartService.getServiceFee(cart.storeId);
   const discount = cartService.calculateDiscount(subtotal);
   const total = cartService.calculateTotal(cart.storeId);
@@ -457,11 +483,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={[typography.titleMedium, { color: '#FFFFFF', fontWeight: '700' }]}>
-              {storeClosed
-                ? 'Store currently closed'
-                : !canPlaceOrder
-                ? 'Complete the details to pay'
-                : `${paymentMethod === 'card' ? 'Pay Now with Paystack' : 'Confirm Order'} · ${appConfig.formatCurrency(total)}`}
+              Pay now
             </Text>
           )}
         </TouchableOpacity>

@@ -197,12 +197,17 @@ class CartService {
    *  - no distance yet → the store's own published fee, else the flat default
    */
   getDeliveryFee(storeId?: string): number {
-    if (this.currentCart?.appliedPromo?.freeDelivery) return 0;
-
     const { distanceMeters, baseDeliveryFee } = this.getStoreContext(storeId);
+
     if (distanceMeters !== undefined) {
-      return deliveryFeeHelper.calculateFee(distanceMeters);
+      const distanceFee = deliveryFeeHelper.calculateFee(distanceMeters);
+      // A free-delivery promo must never override the 20km delivery guard.
+      if (distanceFee < 0) return distanceFee;
+      if (this.currentCart?.appliedPromo?.freeDelivery) return 0;
+      return distanceFee;
     }
+
+    if (this.currentCart?.appliedPromo?.freeDelivery) return 0;
     return typeof baseDeliveryFee === 'number' ? baseDeliveryFee : DEFAULT_DELIVERY_FEE;
   }
 

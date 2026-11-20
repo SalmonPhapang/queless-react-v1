@@ -84,7 +84,16 @@ export const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             resizeMode="contain"
             accessibilityLabel="Queless app logo"
           />
-          <Text style={[typography.headlineLarge, { color: colors.onSurface, marginTop: 16 }]}>
+          <Text
+            style={[
+              typography.headlineLarge,
+              styles.welcomeTitle,
+              { color: colors.onSurface, marginTop: 16 },
+            ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
             Welcome Back
           </Text>
           <Text style={[typography.bodyMedium, { color: colors.subtext, marginTop: 4, textAlign: 'center' }]}>
@@ -276,6 +285,10 @@ const styles = StyleSheet.create({
   headerBox: {
     alignItems: 'center',
     marginBottom: 32,
+  },
+  welcomeTitle: {
+    textAlign: 'center',
+    maxWidth: '100%',
   },
   logo: {
     width: 96,

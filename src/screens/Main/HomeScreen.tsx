@@ -45,6 +45,7 @@ import { SectionHeader } from '../../components/SectionHeader';
 import { CartBanner } from '../../components/CartBanner';
 import { Skeleton, StoreCardSkeleton, ProductCardSkeleton } from '../../components/Skeleton';
 import { addProductToCart } from '../../utils/cartActions';
+import { getStoreDistanceKm } from '../../utils/deliveryRadius';
 import { authService } from '../../services/authService';
 import { cleanText, formatAddress } from '../../utils/address';
 
@@ -132,11 +133,19 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       const nearbyFood = coords
         ? nearbyStores.filter((store) => !store.isAlcohol)
         : nearbyStores;
-      setStores(
-        nearbyFood.length > 0
-          ? nearbyFood
-          : await storeService.getStores({ isAlcohol: false })
-      );
+      const fallbackFood = nearbyFood.length > 0 ? [] : await storeService.getStores({ isAlcohol: false });
+      const displayedStores = nearbyFood.length > 0 ? nearbyFood : fallbackFood.map((store) => {
+        // Keep browsing available outside 20km, but carry the measured distance
+        // so add-to-cart and checkout can refuse delivery.
+        const distanceKm = getStoreDistanceKm(store, coords);
+        const measured = distanceKm === undefined ? store : { ...store, distance: distanceKm };
+        cartService.registerStore(measured);
+        if (distanceKm !== undefined) {
+          cartService.updateStoreContext(store.id, { distanceMeters: distanceKm * 1000 });
+        }
+        return measured;
+      });
+      setStores(displayedStores);
       setRecommendedStores(storeRecs.filter((rec) => !rec.store.isAlcohol));
       setRecommendedItems(
         productRecs.filter((rec) => rec.product.productType !== 'alcohol')

@@ -3,6 +3,8 @@ import { cartService } from '../services/cartService';
 import { authService } from '../services/authService';
 import { Product, SelectedOption } from '../models/product';
 import { Store } from '../models/store';
+import { deliveryLocationService } from '../services/deliveryLocationService';
+import { getStoreDistanceKm, isBeyondDeliveryRadius } from './deliveryRadius';
 
 interface AddToCartArgs {
   navigation: any;
@@ -62,7 +64,12 @@ export async function addProductToCart({
     return false;
   }
 
-  if (store && typeof store.distance === 'number' && store.distance > 20) {
+  // Browse is always allowed; ordering is not. Measure against the active
+  // delivery point when a store arrived without a distance (e.g. Browse).
+  const distanceKm = store
+    ? getStoreDistanceKm(store, deliveryLocationService.getActive()?.coords)
+    : undefined;
+  if (isBeyondDeliveryRadius(distanceKm)) {
     Alert.alert(
       'Delivery unavailable',
       'This store is too far away for delivery. Delivery is only available up to 20km.'
@@ -90,8 +97,8 @@ export async function addProductToCart({
 
   if (store) {
     cartService.registerStore(store);
-    if (typeof store.distance === 'number') {
-      cartService.updateStoreContext(store.id, { distanceMeters: store.distance * 1000 });
+    if (distanceKm !== undefined) {
+      cartService.updateStoreContext(store.id, { distanceMeters: distanceKm * 1000 });
     }
   } else {
     // Store row was not loaded; the product type is the best available signal.

@@ -56,6 +56,19 @@ location first and then notification permission, matching the Flutter app's
 remote push delivery still needs native Firebase registration in a development
 build. Inbox notifications from Supabase work without it.
 
+To test the outside-radius experience without travelling, run:
+
+```bash
+npm run web:radius-test
+```
+
+Every store is then treated as 25km away in development: browsing still works,
+but adding to cart and checkout are blocked. The override is ignored by
+production builds. Use `npm run web` to restore normal behaviour.
+
+You can also set `EXPO_PUBLIC_TEST_DELIVERY_DISTANCE_KM` in local `.env` before
+running `npm run web`.
+
 After changing any `EXPO_PUBLIC_*` value, restart Expo with the cache cleared.
 
 ## Vercel web deployment
