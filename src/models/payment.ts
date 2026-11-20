@@ -1,6 +1,6 @@
 import { PaymentStatus } from './statuses';
 
-export type PaymentMethodType = 'card' | 'cashOnDelivery' | 'eft' | 'instantEft';
+export type PaymentMethodType = 'card' | 'cashOnDelivery' | 'eft' | 'instantEft' | 'capitecPay';
 
 export interface PaystackInitResponse {
   authorizationUrl: string;

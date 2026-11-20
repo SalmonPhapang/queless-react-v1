@@ -2,6 +2,7 @@ import { supabase } from '../config/supabaseClient';
 import { appConfig } from '../config/appConfig';
 import { PaystackInitResponse, PaymentRecord } from '../models/payment';
 import { paymentStatusFromDatabaseValue } from '../models/statuses';
+import { PaymentMethodCode } from '../utils/paymentMethod';
 import { orderService } from './orderService';
 
 export class PaymentError extends Error {
@@ -10,8 +11,6 @@ export class PaymentError extends Error {
     this.name = 'PaymentError';
   }
 }
-
-type PaymentMethodCode = 'instantEft' | 'cashOnDelivery';
 
 interface PaymentRow {
   id: string;
@@ -43,8 +42,9 @@ export const paymentService = {
    * is reused and given a fresh Paystack reference, because Paystack rejects a
    * duplicate reference when the customer retries.
    *
-   * Cash on delivery settles immediately (no gateway). Card / Instant EFT goes
-   * through Paystack so the customer is redirected to the payment gateway.
+   * Cash on delivery settles immediately (no gateway). Card / Instant EFT and
+   * Capitec Pay go through Paystack so the customer is redirected to the hosted
+   * checkout.
    */
   async createPayment(params: {
     orderId: string;

@@ -27,6 +27,7 @@ import { QAiChatScreen } from '../screens/Main/QAiChatScreen';
 import { ErrorScreen } from '../screens/Shared/ErrorScreen';
 import { Product } from '../models/product';
 import { Store } from '../models/store';
+import type { CheckoutPaymentMethod } from '../utils/paymentMethod';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -44,7 +45,13 @@ export type RootStackParamList = {
   ProductOptions: { product: Product; storeId?: string; storeName?: string };
   Cart: undefined;
   Checkout: undefined;
-  PaystackPayment: { authorizationUrl: string; reference: string; orderId: string; paymentId: string };
+  PaystackPayment: {
+    authorizationUrl: string;
+    reference: string;
+    orderId: string;
+    paymentId: string;
+    paymentMethod?: CheckoutPaymentMethod;
+  };
   OrderTracking: { orderId: string; fromCheckout?: boolean };
   AddressManagement: undefined;
   NotificationInbox: undefined;

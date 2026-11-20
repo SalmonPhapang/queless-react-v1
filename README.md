@@ -119,12 +119,32 @@ Paystack secret keys belong **only** in Supabase Edge Function secrets:
   `PAYSTACK_SECRET_KEY_TEST` is accepted as a legacy alias.
 - `PAYSTACK_CALLBACK_URL` — optional; defaults to the deployed
   `paystack-callback` function URL.
+- `PAYSTACK_PUBLIC_KEY` / `PAYSTACK_TEST_PUBLIC_KEY` — optional; used only by
+  the Capitec Pay requery endpoint. If unset, the matching server-side secret
+  key is used.
 
 The client sends `is_debug: appConfig.env !== 'prod'` to
 `initialize-paystack-split` and `verify-paystack-split`. Those functions pick
 the matching key and now fail closed when a debug request has no test key
 configured, so a test checkout can never silently use the live key. Do not put
 Paystack secret keys in `EXPO_PUBLIC_*`, Vercel, or EAS client variables.
+
+## Capitec Pay
+
+Capitec Pay is a separate option at checkout and uses the same Paystack hosted
+checkout as card/Instant EFT. Enable it in the Paystack dashboard under
+**Settings > Preferences > Payments > Accept payments via** and complete any
+required KYC approval; the app does not force an undocumented init channel.
+The customer selects Capitec Pay on the Paystack page and approves the request
+in the Capitec app.
+
+Approval is asynchronous. After returning from Paystack, the app verifies the
+transaction and, for Capitec Pay only, waits at least 90 seconds before the
+first requery and then polls no faster than every 10 seconds (up to ~5 minutes).
+`verify-paystack-split` calls Paystack's `capitec-pay/requery/{reference}`
+server-side and treats a pending result as "still waiting" rather than a failed
+payment. A successful webhook or normal transaction verification still completes
+the order.
 
 Because development and production currently share one Supabase project, the
 mode is request-driven and `paystack-webhook` accepts signatures from both

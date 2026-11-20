@@ -20,10 +20,11 @@ import { appConfig } from '../../config/appConfig';
 import { paymentService } from '../../services/paymentService';
 import { cartService } from '../../services/cartService';
 import { Header } from '../../components/Header';
+import { needsApprovalPolling } from '../../utils/paymentMethod';
 
 type PaymentPhase = 'gateway' | 'verifying' | 'success' | 'failed';
 
-const VerifyingState: React.FC<{ message?: string }> = ({ message }) => {
+const VerifyingState: React.FC<{ message?: string; onCancel?: () => void }> = ({ message, onCancel }) => {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const pulse = useRef(new Animated.Value(0.85)).current;
@@ -93,6 +94,15 @@ const VerifyingState: React.FC<{ message?: string }> = ({ message }) => {
         {message || 'Please wait while we confirm your payment with Paystack…'}
       </Text>
       <ActivityIndicator size="small" color={colors.secondary} style={{ marginTop: 18 }} />
+      {onCancel && (
+        <TouchableOpacity
+          style={[styles.cancelAction, { borderColor: colors.divider }]}
+          onPress={onCancel}
+          activeOpacity={0.85}
+        >
+          <Text style={[typography.labelMedium, { color: colors.subtext }]}>Back to checkout</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -163,7 +173,8 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   route,
 }) => {
   const { colors, typography } = useTheme();
-  const { authorizationUrl, reference, paymentId, orderId } = route.params || {};
+  const { authorizationUrl, reference, paymentId, orderId, paymentMethod } = route.params || {};
+  const isCapitecPay = needsApprovalPolling(paymentMethod);
 
   // The Supabase callback returns raw HTML, so it must be cancelled before the
   // WebView commits the navigation. It still needs to pass the whitelist so
@@ -188,9 +199,32 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   const [phase, setPhase] = useState<PaymentPhase>('gateway');
   const [failTitle, setFailTitle] = useState('Payment not completed');
   const [failMessage, setFailMessage] = useState('');
+  const [verifyMessage, setVerifyMessage] = useState<string | undefined>(undefined);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
   const handled = useRef(false);
   const navigatingAway = useRef(false);
   const overlayOpacity = useRef(new Animated.Value(0)).current;
+
+  // Capitec Pay is approved in the banking app, so Paystack can confirm it
+  // after the customer returns. The docs recommend waiting 90s before the
+  // first requery and never polling faster than 10s.
+  const startedAtRef = useRef(Date.now());
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollAttemptsRef = useRef(0);
+  const pollCancelledRef = useRef(false);
+
+  const clearPollTimer = () => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, []);
 
   const isCallbackUrl = (url: string): boolean => {
     if (!url) return false;
@@ -229,33 +263,76 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
     });
   };
 
-  const finishPayment = async () => {
-    if (handled.current || !paymentId) return;
-    handled.current = true;
-    // Cover the WebView synchronously so the callback HTML never flashes.
-    overlayOpacity.setValue(1);
-    setPhase('verifying');
+  const failVerification = (title: string, message: string) => {
+    clearPollTimer();
+    handled.current = false;
+    setAwaitingApproval(false);
+    setFailTitle(title);
+    setFailMessage(message);
+    setPhase('failed');
+  };
+
+  // verify-paystack-split also requeries Capitec Pay, so this single check
+  // covers both Paystack's transaction status and the Capitec approval status.
+  const checkPayment = async () => {
+    if (!paymentId || pollCancelledRef.current) return;
 
     try {
       const result = await paymentService.verifyPaystackPayment(paymentId, reference);
       if (result.paid) {
+        clearPollTimer();
         await cartService.clearCart();
         setPhase('success');
-      } else {
-        handled.current = false;
-        setFailTitle('Payment not completed');
-        setFailMessage('Paystack has not confirmed this payment yet. Your cart is saved — you can try again.');
-        setPhase('failed');
+        return;
       }
+
+      const maxAttempts = 30; // 10s minimum interval => up to ~5 minutes total
+      if (isCapitecPay && pollAttemptsRef.current < maxAttempts) {
+        pollAttemptsRef.current += 1;
+        // First check happens 90s after opening checkout; later checks are 10s apart.
+        const elapsed = Date.now() - startedAtRef.current;
+        const delay = Math.max(10_000, 90_000 - elapsed);
+        setAwaitingApproval(true);
+        setVerifyMessage('Waiting for approval in your Capitec app…');
+        pollTimerRef.current = setTimeout(() => {
+          void checkPayment();
+        }, delay);
+        return;
+      }
+
+      failVerification(
+        'Payment not completed',
+        'Paystack has not confirmed this payment yet. Your cart is saved — you can try again.'
+      );
     } catch (e: any) {
-      handled.current = false;
-      setFailTitle('Could not verify payment');
-      setFailMessage(
+      failVerification(
+        'Could not verify payment',
         e?.message ||
           'We could not confirm the payment. Your cart is saved — check your Orders tab before paying again.'
       );
-      setPhase('failed');
     }
+  };
+
+  const finishPayment = async () => {
+    if (handled.current || !paymentId) return;
+    handled.current = true;
+    pollCancelledRef.current = false;
+    pollAttemptsRef.current = 0;
+    // Cover the WebView synchronously so the callback HTML never flashes.
+    overlayOpacity.setValue(1);
+    setPhase('verifying');
+    setVerifyMessage(undefined);
+    setAwaitingApproval(false);
+    await checkPayment();
+  };
+
+  const cancelWaiting = () => {
+    pollCancelledRef.current = true;
+    clearPollTimer();
+    handled.current = false;
+    setAwaitingApproval(false);
+    navigatingAway.current = true;
+    navigation.goBack();
   };
 
   // Block the callback navigation itself: returning false stops the WebView
@@ -304,6 +381,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
       if (navigatingAway.current) return;
       if (phase === 'verifying') {
         event.preventDefault();
+        if (awaitingApproval) cancelWaiting();
         return;
       }
       if (phase === 'success') {
@@ -312,13 +390,16 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
       }
     });
     return unsubscribe;
-  }, [navigation, phase]);
+  }, [navigation, phase, awaitingApproval]);
 
   useFocusEffect(
     useCallback(() => {
       if (Platform.OS === 'web') return undefined;
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-        if (phase === 'verifying') return true;
+        if (phase === 'verifying') {
+          if (awaitingApproval) cancelWaiting();
+          return true;
+        }
         if (phase === 'success') {
           navigateHome();
           return true;
@@ -326,20 +407,35 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
         return false;
       });
       return () => subscription.remove();
-    }, [phase])
+    }, [phase, awaitingApproval])
   );
 
   const onBack = () => navigation.goBack();
 
   // State screens are fully opaque and rendered without the gateway header so
   // no Paystack page/response text can show through while verifying.
-  if (phase === 'verifying') return <VerifyingState />;
+  if (phase === 'verifying') {
+    return (
+      <VerifyingState
+        message={verifyMessage}
+        onCancel={awaitingApproval ? cancelWaiting : undefined}
+      />
+    );
+  }
   if (phase === 'success') return <SuccessState onTrackOrder={goToTracking} />;
   if (phase === 'failed') return <FailedState title={failTitle} message={failMessage} onBack={onBack} />;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      <Header title="Paystack Secure Payment" showBack onBackPress={onBack} />
+      <Header title={isCapitecPay ? 'Capitec Pay (Paystack)' : 'Paystack Secure Payment'} showBack onBackPress={onBack} />
+
+      {isCapitecPay && (
+        <View style={[styles.capitecHint, { backgroundColor: colors.cardBackground }]}>
+          <Text style={[typography.bodySmall, { color: colors.subtext }]}>
+            Choose Capitec Pay on the Paystack page, then approve the request in your Capitec app.
+          </Text>
+        </View>
+      )}
 
       {Platform.OS === 'web' ? (
         <View style={[styles.webNotice, { backgroundColor: colors.cardBackground }]}>
@@ -423,6 +519,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 180,
+  },
+  capitecHint: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 12,
+  },
+  cancelAction: {
+    marginTop: 16,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   verifyCover: {
     ...absoluteFill,

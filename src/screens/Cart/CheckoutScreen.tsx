@@ -26,6 +26,11 @@ import { appConfig } from '../../config/appConfig';
 import { settlementCalculator } from '../../utils/settlementCalculator';
 import { formatAddress } from '../../utils/address';
 import { getStoreDistanceKm, isBeyondDeliveryRadius } from '../../utils/deliveryRadius';
+import {
+  CheckoutPaymentMethod,
+  toOrderPaymentMethod,
+  toPaymentMethodCode,
+} from '../../utils/paymentMethod';
 
 export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
@@ -34,7 +39,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
   const [user, setUser] = useState<User | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'cashOnDelivery'>('card');
+  const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('card');
   const [loading, setLoading] = useState(false);
   const [codAllowed, setCodAllowed] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -227,7 +232,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         storeShare: settlement.storeShare,
         quelessShare: settlement.quelessShare,
         deliveryAddress: selectedAddress,
-        paymentMethod: paymentMethod === 'card' ? 'Instant EFT' : 'Cash on Delivery',
+        paymentMethod: toOrderPaymentMethod(paymentMethod),
         orderType,
         promoCodeId: cart.appliedPromo?.id,
         aiAssisted: cart.aiAssisted,
@@ -238,7 +243,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       const payment = await paymentService.createPayment({
         orderId: order.id,
         amount: order.total,
-        method: paymentMethod === 'card' ? 'instantEft' : 'cashOnDelivery',
+        method: toPaymentMethodCode(paymentMethod),
       });
 
       // Cash on delivery settles immediately.
@@ -255,8 +260,8 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         return;
       }
 
-      // 3. Card / Instant EFT — hand off to Paystack. The cart is only cleared
-      //    once the payment is verified as successful.
+      // 3. Card / Instant EFT / Capitec Pay — hand off to Paystack. The cart is
+      //    only cleared once the payment is verified as successful.
       const paystack = await paymentService.initializePaystackPayment(payment.id);
 
       navigation.replace('PaystackPayment', {
@@ -264,6 +269,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         paymentId: payment.id,
         reference: paystack.reference || payment.reference,
         authorizationUrl: paystack.authorizationUrl,
+        paymentMethod,
       });
     } catch (e: any) {
       setStatusMessage(e?.message || 'We could not place your order. Your cart is still saved.');
@@ -341,6 +347,35 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
               name={paymentMethod === 'card' ? 'radio-button-on' : 'radio-button-off'}
               size={20}
               color={paymentMethod === 'card' ? colors.secondary : colors.subtext}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.methodOption,
+              {
+                backgroundColor: colors.cardBackground,
+                borderColor: paymentMethod === 'capitecPay' ? colors.secondary : colors.divider,
+              },
+            ]}
+            onPress={() => setPaymentMethod('capitecPay')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.methodLeft}>
+              <Ionicons name="phone-portrait-outline" size={22} color={colors.secondary} style={{ marginRight: 12 }} />
+              <View>
+                <Text style={[typography.titleSmall, { color: colors.onSurface }]}>
+                  Capitec Pay
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.subtext }]}>
+                  Approve in the Capitec app (Paystack)
+                </Text>
+              </View>
+            </View>
+            <Ionicons
+              name={paymentMethod === 'capitecPay' ? 'radio-button-on' : 'radio-button-off'}
+              size={20}
+              color={paymentMethod === 'capitecPay' ? colors.secondary : colors.subtext}
             />
           </TouchableOpacity>
 
