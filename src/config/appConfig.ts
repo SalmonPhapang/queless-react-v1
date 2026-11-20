@@ -25,7 +25,9 @@ const defaultOsmAttribution =
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lxsvydiyzeavdqbjxkpp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4c3Z5ZGl5emVhdmRxYmp4a3BwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3Njg1MDQsImV4cCI6MjA4MzM0NDUwNH0.nThX1Mj5MlKbsCsmlW8RhukSXC57kcbB9za92LwwiDQ';
 
-const rawEnv = (process.env.APP_ENV || 'dev').toLowerCase();
+// Expo inlines only EXPO_PUBLIC_* variables into client bundles. APP_ENV is
+// kept as a fallback for native/server-side scripts.
+const rawEnv = (process.env.EXPO_PUBLIC_APP_ENV || process.env.APP_ENV || 'dev').toLowerCase();
 export const environment: AppEnvironment = (rawEnv === 'stage' || rawEnv === 'staging') ? 'stage' : (rawEnv === 'prod' || rawEnv === 'production') ? 'prod' : 'dev';
 
 export const appConfig = {

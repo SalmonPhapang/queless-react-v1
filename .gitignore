@@ -10,12 +10,23 @@ dist/
 web-build/
 android/
 ios/
-.eas/
+
+# Expo Workflows are committed; ignore other local EAS files
+.eas/*
+!.eas/workflows/
+!.eas/workflows/**
 
 # Environment files (keep the example tracked)
 .env
 .env.*
 !.env.example
+
+# Signing credentials
+credentials.json
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
 
 # Logs and local tooling
 *.log

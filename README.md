@@ -58,6 +58,28 @@ build. Inbox notifications from Supabase work without it.
 
 After changing any `EXPO_PUBLIC_*` value, restart Expo with the cache cleared.
 
+## Vercel web deployment
+
+The Vercel project `queless-react-v1` is connected to this GitHub repository.
+Pushes to `main` create a Production deployment; other branches create Preview
+deployments. Build settings are stored both in `vercel.json` and in the Vercel
+project:
+
+- Install command: `npm ci`
+- Build command: `npm run build:web`
+- Output directory: `dist`
+- Framework: Other
+- Node.js: `26.x` (pinned by `package.json`)
+
+`vercel.json` also adds an SPA fallback so deep links are served by
+`dist/index.html`.
+
+Client-side configuration must use `EXPO_PUBLIC_*` names because Expo inlines
+those values into the web bundle. The Vercel project is configured with the
+values from `.env.example`; Production sets `EXPO_PUBLIC_APP_ENV=prod`, while
+Preview and Development use `dev`. Existing Vercel Authentication/deployment
+protection settings are unchanged.
+
 ## Checks
 
 ```bash
