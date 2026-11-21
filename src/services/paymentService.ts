@@ -42,8 +42,9 @@ export const paymentService = {
    * is reused and given a fresh Paystack reference, because Paystack rejects a
    * duplicate reference when the customer retries.
    *
-   * Cash on delivery settles immediately (no gateway). Card / Instant EFT use
-   * Paystack Checkout; Capitec Pay uses a Capitec-only authorization URL.
+   * Cash on delivery settles immediately (no gateway). Card and Instant EFT
+   * each use their own Paystack Checkout channel; Capitec Pay uses a
+   * Capitec-only authorization URL.
    */
   async createPayment(params: {
     orderId: string;

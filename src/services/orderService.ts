@@ -26,7 +26,7 @@ export interface CreateOrderParams {
   storeShare: number;
   quelessShare: number;
   deliveryAddress: Address;
-  /** Canonical label persisted on orders.payment_method, e.g. 'Instant EFT'. */
+  /** Canonical label persisted on orders.payment_method, e.g. 'Card' or 'Instant EFT'. */
   paymentMethod: string;
   orderType: 'Food' | 'Liquor';
   promoCodeId?: string;

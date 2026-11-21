@@ -35,10 +35,11 @@ const RequestSentState: React.FC<{
   waitingLabel: string;
   methodLabel: string;
   isCapitecPay: boolean;
+  isInstantEft: boolean;
   amount?: number;
   reference?: string;
   onOpenRequest?: () => void;
-}> = ({ message, waitingLabel, methodLabel, isCapitecPay, amount, reference, onOpenRequest }) => {
+}> = ({ message, waitingLabel, methodLabel, isCapitecPay, isInstantEft, amount, reference, onOpenRequest }) => {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const pulse = useRef(new Animated.Value(0.9)).current;
@@ -100,7 +101,12 @@ const RequestSentState: React.FC<{
       ]
     : [
         { title: 'Open the payment window', body: 'We opened a secure window for your payment.' },
-        { title: 'Complete payment', body: 'Use your card or Instant EFT.' },
+        {
+          title: 'Complete payment',
+          body: isInstantEft
+            ? 'Approve the transfer in your banking app.'
+            : 'Enter your card details in the secure window.',
+        },
         { title: 'We’ll finish the rest', body: 'This screen updates as soon as payment is complete.' },
       ];
 
@@ -321,7 +327,11 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   const { colors, typography } = useTheme();
   const { authorizationUrl, reference, orderId, paymentId, paymentMethod, amount } = route.params || {};
   const isCapitecPay = needsApprovalPolling(paymentMethod);
-  const methodLabel = isCapitecPay ? 'Capitec Pay' : 'Card / Instant EFT';
+  const methodLabel = isCapitecPay
+    ? 'Capitec Pay'
+    : paymentMethod === 'instantEft'
+      ? 'Instant EFT'
+      : 'Card';
   const waitingLabel = isCapitecPay ? 'Waiting for approval…' : 'Waiting for confirmation…';
   const defaultRequestMessage = isCapitecPay
     ? 'We’ve sent a request to your Capitec app. Approve it there and we’ll confirm your order automatically.'
@@ -558,6 +568,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
         waitingLabel={waitingLabel}
         methodLabel={methodLabel}
         isCapitecPay={isCapitecPay}
+        isInstantEft={paymentMethod === 'instantEft'}
         amount={amount}
         reference={reference}
         onOpenRequest={Platform.OS === 'web' ? openPaymentWindow : undefined}

@@ -1,23 +1,26 @@
 import { PaymentMethodType } from '../models/payment';
 
 /**
- * The three choices shown in Checkout. Card/Instant EFT use Paystack Checkout,
- * Capitec Pay uses a Capitec-only authorization URL, and COD is settled locally.
+ * The four choices shown in Checkout. Card and Instant EFT each open their own
+ * Paystack channel, Capitec Pay uses a Capitec-only authorization URL, and COD
+ * is settled locally.
  */
-export type CheckoutPaymentMethod = 'card' | 'capitecPay' | 'cashOnDelivery';
+export type CheckoutPaymentMethod = 'card' | 'instantEft' | 'capitecPay' | 'cashOnDelivery';
 
 export type PaymentMethodCode = PaymentMethodType;
 
-export type OrderPaymentMethodLabel = 'Instant EFT' | 'Capitec Pay' | 'Cash on Delivery';
+export type OrderPaymentMethodLabel = 'Card' | 'Instant EFT' | 'Capitec Pay' | 'Cash on Delivery';
 
 const ORDER_LABELS: Record<CheckoutPaymentMethod, OrderPaymentMethodLabel> = {
-  card: 'Instant EFT',
+  card: 'Card',
+  instantEft: 'Instant EFT',
   capitecPay: 'Capitec Pay',
   cashOnDelivery: 'Cash on Delivery',
 };
 
 const PAYMENT_CODES: Record<CheckoutPaymentMethod, PaymentMethodCode> = {
-  card: 'instantEft',
+  card: 'card',
+  instantEft: 'instantEft',
   capitecPay: 'capitecPay',
   cashOnDelivery: 'cashOnDelivery',
 };

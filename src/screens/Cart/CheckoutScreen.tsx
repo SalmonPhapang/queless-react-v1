@@ -375,10 +375,10 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
               <Ionicons name="card-outline" size={22} color={colors.secondary} style={{ marginRight: 12 }} />
               <View>
                 <Text style={[typography.titleSmall, { color: colors.onSurface }]}>
-                  Card or Instant EFT
+                  Card
                 </Text>
                 <Text style={[typography.bodySmall, { color: colors.subtext }]}>
-                  Secure online payment
+                  Debit or credit card
                 </Text>
               </View>
             </View>
@@ -386,6 +386,35 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
               name={paymentMethod === 'card' ? 'radio-button-on' : 'radio-button-off'}
               size={20}
               color={paymentMethod === 'card' ? colors.secondary : colors.subtext}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.methodOption,
+              {
+                backgroundColor: colors.cardBackground,
+                borderColor: paymentMethod === 'instantEft' ? colors.secondary : colors.divider,
+              },
+            ]}
+            onPress={() => setPaymentMethod('instantEft')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.methodLeft}>
+              <Ionicons name="business-outline" size={22} color={colors.secondary} style={{ marginRight: 12 }} />
+              <View>
+                <Text style={[typography.titleSmall, { color: colors.onSurface }]}>
+                  Instant EFT
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.subtext }]}>
+                  Pay directly from your bank
+                </Text>
+              </View>
+            </View>
+            <Ionicons
+              name={paymentMethod === 'instantEft' ? 'radio-button-on' : 'radio-button-off'}
+              size={20}
+              color={paymentMethod === 'instantEft' ? colors.secondary : colors.subtext}
             />
           </TouchableOpacity>
 
