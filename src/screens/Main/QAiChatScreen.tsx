@@ -21,9 +21,15 @@ import {
   QChatSelectableOrder,
 } from '../../services/aiChatService';
 import { ProductCard } from '../../components/ProductCard';
+import { StoreCard } from '../../components/StoreCard';
+import {
+  getAiProductNavigationTarget,
+  getAiStoreNavigationTarget,
+} from '../../utils/aiCardNavigation';
 import { addProductToCart } from '../../utils/cartActions';
 import { cartService } from '../../services/cartService';
 import { Product } from '../../models/product';
+import { Store } from '../../models/store';
 import { appConfig } from '../../config/appConfig';
 import { authService } from '../../services/authService';
 import { orderService } from '../../services/orderService';
@@ -512,8 +518,9 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     }
   };
 
-  const handleAddAiProductToCart = async (product: Product) => {
-    if (!product.storeId) {
+  const handleAddAiProductToCart = async (product: Product, store?: Store) => {
+    const storeId = product.storeId || store?.id;
+    if (!storeId) {
       showToast('This item cannot be added to cart right now');
       return;
     }
@@ -521,14 +528,30 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     const added = await addProductToCart({
       navigation,
       product,
-      storeId: product.storeId,
-      storeName: 'Recommended Store',
+      store,
+      storeId,
+      storeName: store?.name ?? 'Recommended Store',
       aiAssisted: true,
       aiConversationId: conversationId ?? undefined,
     });
     if (added) {
       showToast(`${product.name} added to cart`);
     }
+  };
+
+  const handleOpenAiProduct = (product: Product, store?: Store) => {
+    const target = getAiProductNavigationTarget(product, store);
+    if (!target) {
+      showToast('Open the store to view this item');
+      return;
+    }
+    navigation.navigate(target.screen, target.params);
+  };
+
+  const handleOpenAiStore = (store: Store) => {
+    const target = getAiStoreNavigationTarget(store);
+    if (!target) return;
+    navigation.navigate(target.screen, target.params);
   };
 
   const getFilterPrompt = (tag: string) => {
@@ -690,14 +713,29 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
             {item.suggestedProducts && item.suggestedProducts.length > 0 && (
               <View style={styles.productsBox}>
-                {item.suggestedProducts.map((prod) => (
-                  <View key={prod.id} style={styles.prodRow}>
-                    <ProductCard
-                      product={prod}
-                      onPress={() => {}}
-                      onAddToCart={handleAddAiProductToCart}
-                      horizontal
-                    />
+                {item.suggestedProducts.map((prod) => {
+                  const productStore = prod.storeId
+                    ? item.suggestedStores?.find((s) => s.id === prod.storeId)
+                    : undefined;
+                  return (
+                    <View key={prod.id} style={styles.prodRow}>
+                      <ProductCard
+                        product={prod}
+                        onPress={() => handleOpenAiProduct(prod, productStore)}
+                        onAddToCart={(p) => handleAddAiProductToCart(p, productStore)}
+                        horizontal
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {item.suggestedStores && item.suggestedStores.length > 0 && (
+              <View style={styles.productsBox}>
+                {item.suggestedStores.map((store) => (
+                  <View key={store.id} style={styles.prodRow}>
+                    <StoreCard store={store} onPress={handleOpenAiStore} horizontal />
                   </View>
                 ))}
               </View>
