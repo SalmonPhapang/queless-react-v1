@@ -35,7 +35,7 @@ import { authService } from '../../services/authService';
 import { orderService } from '../../services/orderService';
 import { supportService } from '../../services/supportService';
 import { Order } from '../../models/order';
-import { orderStatusHelpers, orderStatusMeta } from '../../models/statuses';
+import { orderStatusMeta } from '../../models/statuses';
 import {
   ASSISTANT_DISCLOSURE,
   ASSISTANT_NAME,
@@ -44,6 +44,8 @@ import {
   buildFaqReply,
   buildTicketDescription,
   buildTicketSubject,
+  buildTopicOrderView,
+  canTrackOrder,
   detectShoppingIntent,
   detectSupportTopic,
   GENERAL_SUGGESTIONS,
@@ -168,19 +170,11 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     return orderService.getUserOrders(user.id);
   };
 
-  const isRecent = (order: Order) => {
-    const t = new Date(order.createdAt).getTime();
-    return Number.isFinite(t) ? t >= Date.now() - 7 * 24 * 60 * 60 * 1000 : false;
-  };
-
   const buildTopicReply = (topic: SupportTopic, orders: Order[]): QChatMessage => {
-    const active = orders.filter((o) => !orderStatusHelpers.isTerminal(o.status));
-    const recent = orders.filter(isRecent);
-    const source = topic === 'order_status' || topic === 'delivery' ? active : recent;
-    const visible = source.slice(0, 6);
+    const view = buildTopicOrderView(topic, orders, (amount) => appConfig.formatCurrency(amount));
     const id = `msg_${Date.now()}`;
 
-    if (visible.length === 0) {
+    if (view.visible.length === 0) {
       return {
         id,
         sender: 'assistant',
@@ -193,40 +187,30 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       };
     }
 
-    const lines = visible.map((order) => {
-      const prefix = `• ${orderLabel(order)} — **${statusLabel(order)}**`;
-      if (topic === 'payment') return `${prefix} · payment ${order.paymentStatus ?? 'pending'}`;
-      if (topic === 'delivery' && order.driver?.name) return `${prefix} · driver ${order.driver.name}`;
-      return `${prefix} · ${appConfig.formatCurrency(order.total)}`;
-    });
-
-    const intro: Record<SupportTopic, string> = {
-      order_status: "Here's what I can see for your active orders:",
-      delivery:
-        "Here's the latest I have for delivery. Open tracking for live movement — if something looks wrong, pick the order and I'll open a ticket.",
-      payment:
-        "I can see your recent payment states. I won't guess at bank or card details — pick the order and I'll help or open a ticket.",
-      cancellation:
-        "I can check whether an order looks cancellable, but I won't change it without your go-ahead. Pick the order below.",
-      other:
-        "I can bring in a human teammate. Pick the order this is about, or add more detail below and I'll open a ticket.",
-    };
+    const isTrackingTopic = topic === 'order_status' || topic === 'delivery';
+    const suggestions = [
+      ...(view.trackable.length ? ['📦 Track my order'] : []),
+      ...(view.awaitingPayment.length ? ['💳 Payment question'] : []),
+      '📚 Delivery & payment FAQs',
+      '🙋 Speak to a human',
+    ];
 
     return {
       id,
       sender: 'assistant',
-      text: `${intro[topic]}\n${lines.join('\n')}`,
+      text: view.text,
       timestamp: new Date().toISOString(),
-      trackActions:
-        topic === 'order_status' || topic === 'delivery'
-          ? visible.map((o) => ({
-              label: `Track #${o.orderNumber || o.id.substring(0, 8).toUpperCase()}`,
-              orderId: o.id,
-            }))
-          : undefined,
-      selectableOrders: visible.map(toSelectableOrder),
+      // Never open a live tracking screen for an unpaid order — there is no
+      // delivery movement to show until payment is completed.
+      trackActions: isTrackingTopic
+        ? view.trackable.map((o) => ({
+            label: `Track #${o.orderNumber || o.id.substring(0, 8).toUpperCase()}`,
+            orderId: o.id,
+          }))
+        : undefined,
+      selectableOrders: view.visible.map(toSelectableOrder),
       suggestedAction: { type: 'view_order', payload: { supportTopic: topic } },
-      suggestions: ['📚 Delivery & payment FAQs', '🙋 Speak to a human', '📦 Track my order'],
+      suggestions,
     };
   };
 
@@ -243,10 +227,9 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       text: `What's going on with order #${order.orderNumber} from ${order.storeName}? Choose one option below, then add any detail and tap **Create support ticket**. I'm a virtual assistant; a human teammate will review the ticket.`,
       timestamp: new Date().toISOString(),
       issueOptions: SUPPORT_ISSUE_OPTIONS,
-      suggestedAction: {
-        type: 'view_order',
-        payload: { issueOrder: order, supportTopic: topic },
-      },
+      suggestedAction: canTrackOrder(order)
+        ? { type: 'view_order', payload: { issueOrder: order, supportTopic: topic } }
+        : undefined,
     };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
   };
@@ -278,8 +261,14 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
           category: contextTopic === 'other' ? category : contextTopic,
           details: '',
         },
-        trackActions: [{ label: `View order #${order.orderNumber}`, orderId: order.id }],
-        suggestions: ['📚 Delivery & payment FAQs', '📦 Track my order', '🙋 Speak to a human'],
+        trackActions: canTrackOrder(order)
+          ? [{ label: `View order #${order.orderNumber}`, orderId: order.id }]
+          : undefined,
+        suggestions: [
+          ...(canTrackOrder(order) ? ['📦 Track my order'] : ['💳 Payment question']),
+          '📚 Delivery & payment FAQs',
+          '🙋 Speak to a human',
+        ],
       },
     ]);
   };

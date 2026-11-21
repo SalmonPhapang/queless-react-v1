@@ -1,5 +1,9 @@
 import type { Order } from '../models/order';
-import { orderStatusMeta, orderStatusHelpers } from '../models/statuses';
+import {
+  orderStatusFromDatabaseValue,
+  orderStatusMeta,
+  orderStatusHelpers,
+} from '../models/statuses';
 
 export type SupportTopic = 'order_status' | 'delivery' | 'payment' | 'cancellation' | 'other';
 
@@ -196,11 +200,46 @@ export function statusLabel(order: Pick<Order, 'status'>): string {
   return orderStatusMeta[order.status]?.displayName || order.status;
 }
 
+type OrderPaymentState = {
+  status?: string | null;
+  paymentStatus?: string | null;
+};
+
+/** Accepts OrderStatus, raw database values and the lightweight chat order pick. */
+export function isAwaitingPaymentStatus(status?: string | null): boolean {
+  return orderStatusFromDatabaseValue(status ?? undefined) === 'awaiting_payment';
+}
+
+/**
+ * An unpaid order has no live delivery to track yet. COD orders keep a pending
+ * payment status but still become trackable after store acceptance, so only an
+ * explicit awaiting_payment state blocks tracking.
+ */
+export function isAwaitingPaymentOrder(order: OrderPaymentState): boolean {
+  return isAwaitingPaymentStatus(order.status) || isAwaitingPaymentStatus(order.paymentStatus);
+}
+
+export function canTrackOrder(order: OrderPaymentState): boolean {
+  const status = orderStatusFromDatabaseValue(order.status ?? undefined);
+  return !orderStatusHelpers.isTerminal(status) && !isAwaitingPaymentOrder(order);
+}
+
+export function isRecentOrder(order: Pick<Order, 'createdAt'>): boolean {
+  const time = new Date(order.createdAt).getTime();
+  return Number.isFinite(time) ? time >= Date.now() - 7 * 24 * 60 * 60 * 1000 : false;
+}
+
+export function unpaidOrderReply(order: Pick<Order, 'orderNumber' | 'id' | 'storeName'>): string {
+  return `Order ${orderLabel(order)} is **Awaiting Payment**, so there's nothing to track yet. Complete payment from the order in your Orders tab, then ask me again — or I can open a support ticket if you're stuck.`;
+}
+
 export function orderStatusReply(order: Order): string {
+  if (isAwaitingPaymentOrder(order)) return unpaidOrderReply(order);
   return `Order ${orderLabel(order)} is **${statusLabel(order)}**. Tap the tracking button below for live updates. If that doesn't match what you're seeing, I can open a ticket.`;
 }
 
 export function deliveryReply(order: Order): string {
+  if (isAwaitingPaymentOrder(order)) return unpaidOrderReply(order);
   const driver = order.driver?.name?.trim();
   const who = driver ? ` Your driver is **${driver}**.` : '';
   return `Order ${orderLabel(order)} is **${statusLabel(order)}**.${who} Open live tracking for the latest location. If it's late or something is wrong with the delivery, I can open a ticket for a human teammate.`;
@@ -251,6 +290,65 @@ export function replyForTopic(topic: SupportTopic, order: Order): string {
     default:
       return `I can see ${orderLabel(order)}. A human teammate can help from here — I'll open a ticket with this chat and the order details.`;
   }
+}
+
+export interface TopicOrderView {
+  visible: Order[];
+  trackable: Order[];
+  awaitingPayment: Order[];
+  text: string;
+}
+
+/**
+ * Pure view model for Ask Q order lists. Tracking is only offered for orders
+ * that have actually been paid — an awaiting_payment order is shown with an
+ * explanation instead of a button that leads to a live tracking screen.
+ */
+export function buildTopicOrderView(
+  topic: SupportTopic,
+  orders: Order[],
+  formatCurrency: (amount: number) => string
+): TopicOrderView {
+  const isTrackingTopic = topic === 'order_status' || topic === 'delivery';
+  const active = orders.filter(
+    (order) => !orderStatusHelpers.isTerminal(orderStatusFromDatabaseValue(order.status))
+  );
+  const source = isTrackingTopic ? active : orders.filter(isRecentOrder);
+  const visible = source.slice(0, 6);
+  const awaitingPayment = visible.filter(isAwaitingPaymentOrder);
+  const trackable = visible.filter(canTrackOrder);
+
+  const lines = visible.map((order) => {
+    const prefix = `• ${orderLabel(order)} — **${statusLabel(order)}**`;
+    if (isTrackingTopic && isAwaitingPaymentOrder(order)) {
+      return `${prefix} · payment not completed — no tracking yet`;
+    }
+    if (topic === 'payment') return `${prefix} · payment ${order.paymentStatus ?? 'pending'}`;
+    if (topic === 'delivery' && order.driver?.name) return `${prefix} · driver ${order.driver.name}`;
+    return `${prefix} · ${formatCurrency(order.total)}`;
+  });
+
+  const intros: Record<SupportTopic, string> = {
+    order_status: awaitingPayment.length
+      ? "Here's what I can see. An order awaiting payment has no live tracking until payment is completed:"
+      : "Here's what I can see for your active orders:",
+    delivery: awaitingPayment.length
+      ? "Here's the latest I have. An unpaid order has nothing to track yet — complete payment first. Paid orders can be opened for live movement."
+      : "Here's the latest I have for delivery. Open tracking for live movement — if something looks wrong, pick the order and I'll open a ticket.",
+    payment:
+      "I can see your recent payment states. I won't guess at bank or card details — pick the order and I'll help or open a ticket.",
+    cancellation:
+      "I can check whether an order looks cancellable, but I won't change it without your go-ahead. Pick the order below.",
+    other:
+      "I can bring in a human teammate. Pick the order this is about, or add more detail below and I'll open a ticket.",
+  };
+
+  return {
+    visible,
+    trackable,
+    awaitingPayment,
+    text: `${intros[topic]}\n${lines.join('\n')}`,
+  };
 }
 
 export function buildTicketSubject(topic: SupportTopic, order?: Order | null): string {

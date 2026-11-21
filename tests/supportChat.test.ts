@@ -7,9 +7,13 @@ import {
   buildFaqReply,
   buildTicketDescription,
   buildTicketSubject,
+  buildTopicOrderView,
+  canTrackOrder,
   detectShoppingIntent,
   detectSupportTopic,
   GENERAL_SUGGESTIONS,
+  isAwaitingPaymentOrder,
+  isAwaitingPaymentStatus,
   paymentReply,
   replyForTopic,
   SHOPPING_UNAVAILABLE_REPLY,
@@ -148,4 +152,43 @@ test('FAQ and order-issue routing stay separate', () => {
   assert.equal(detectSupportTopic('I was charged twice'), 'payment');
   assert.equal(detectSupportTopic('Please cancel order QLE-ABC123'), 'cancellation');
   assert.equal(detectSupportTopic('Find me a burger'), null);
+});
+
+test('awaiting-payment orders cannot be tracked', () => {
+  const unpaid = makeOrder({
+    id: 'unpaid-order',
+    orderNumber: 'QLE-UNPAID',
+    status: 'awaiting_payment',
+    paymentStatus: 'awaiting_payment' as PaymentStatus,
+  });
+  const paid = makeOrder();
+  const codWithPendingPayment = makeOrder({
+    paymentStatus: 'pending' as PaymentStatus,
+    status: 'awaiting_store_acceptance',
+  });
+
+  assert.equal(isAwaitingPaymentStatus('awaitingPayment'), true);
+  assert.equal(isAwaitingPaymentStatus('awaiting_payment'), true);
+  assert.equal(isAwaitingPaymentStatus('completed'), false);
+  assert.equal(isAwaitingPaymentOrder(unpaid), true);
+  assert.equal(canTrackOrder(unpaid), false);
+  assert.equal(canTrackOrder(paid), true);
+  assert.equal(canTrackOrder(codWithPendingPayment), true);
+  assert.equal(canTrackOrder(makeOrder({ status: 'delivered' })), false);
+
+  for (const topic of ['order_status', 'delivery'] as const) {
+    const view = buildTopicOrderView(topic, [unpaid, paid], (n) => `R${n.toFixed(2)}`);
+    assert.equal(view.trackable.length, 1);
+    assert.equal(view.trackable[0].id, paid.id);
+    assert.equal(view.awaitingPayment.length, 1);
+    assert.match(view.text, /payment not completed — no tracking yet/);
+  }
+
+  const unpaidOnly = buildTopicOrderView('order_status', [unpaid], (n) => `R${n.toFixed(2)}`);
+  assert.equal(unpaidOnly.trackable.length, 0);
+  assert.match(unpaidOnly.text, /no live tracking until payment is completed/i);
+  assert.match(replyForTopic('order_status', unpaid), /nothing to track/i);
+  assert.match(replyForTopic('delivery', unpaid), /complete payment/i);
+  assert.doesNotMatch(replyForTopic('delivery', unpaid), /tracking button|live tracking/i);
+  assert.match(replyForTopic('order_status', paid), /tracking button/i);
 });
