@@ -22,8 +22,8 @@ the app stores yet; use a development build if the QR code will not open.
 - The tracking map always uses the Leaflet/OpenStreetMap iframe on web, even
   when `EXPO_PUBLIC_MAPS_PROVIDER=google`.
 - `react-native-maps` is only loaded on native builds.
-- Paystack checkout is native-only. On web, the payment screen shows a manual
-  **Verify payment** action so you can still exercise verification flows.
+- On web, Paystack checkout opens in a secure window. The app watches for the
+  return callback and confirms the payment automatically.
 - AsyncStorage works on web through the package's browser backend.
 
 ## Configuration
@@ -152,6 +152,11 @@ Because development and production currently share one Supabase project, the
 mode is request-driven and `paystack-webhook` accepts signatures from both
 keys. For high-value release traffic, use separate Supabase projects for dev
 and prod so only the correct key exists in each project.
+
+If the app cannot confirm a payment, the **Payment not completed** screen offers
+**Cancel order**. `cancel-unpaid-order` rechecks the transaction (and requeries
+Capitec Pay where relevant) before cancelling, so a payment that completed in
+the background is never cancelled.
 
 ## Checks
 

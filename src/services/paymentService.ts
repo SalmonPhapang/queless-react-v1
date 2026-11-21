@@ -217,6 +217,56 @@ export const paymentService = {
     };
   },
 
+  /**
+   * Cancel an order whose payment was never confirmed. The edge function
+   * re-checks the transaction first; if it completed in the background the
+   * caller gets `paid: true` and treats the flow as a success instead.
+   */
+  async cancelUnpaidPayment(params: {
+    paymentId: string;
+    orderId: string;
+  }): Promise<{ paid: boolean; cancelled: boolean; alreadyCancelled: boolean }> {
+    const { data, error } = await supabase.functions.invoke('cancel-unpaid-order', {
+      body: {
+        payment_id: params.paymentId,
+        order_id: params.orderId,
+        is_debug: appConfig.env !== 'prod',
+      },
+    });
+
+    if (error) {
+      const context = (error as any)?.context as Response | undefined;
+      let serverMessage = '';
+      if (context && typeof context.json === 'function') {
+        try {
+          const payload = (await context.json()) as { error?: string };
+          serverMessage = payload?.error ?? '';
+        } catch {
+          // Fall through to the generic message below.
+        }
+      }
+      const message = serverMessage || error.message || '';
+      if (message.includes('Order can no longer be cancelled')) {
+        throw new PaymentError('This order can no longer be cancelled from here. Check your Orders tab.');
+      }
+      if (message.includes('confirm the payment status')) {
+        throw new PaymentError('We could not confirm the payment yet. Please try again.');
+      }
+      throw new PaymentError('We could not cancel this order. Please try again.');
+    }
+
+    const response = data as Record<string, any> | null;
+    if (!response?.status) {
+      throw new PaymentError(response?.error || 'We could not cancel this order. Please try again.');
+    }
+
+    return {
+      paid: response.paid === true,
+      cancelled: response.cancelled === true,
+      alreadyCancelled: response.already_cancelled === true,
+    };
+  },
+
   async getPaymentByOrderId(orderId: string): Promise<PaymentRecord | null> {
     const { data, error } = await supabase
       .from('payments')

@@ -281,10 +281,20 @@ const SuccessState: React.FC<{ onTrackOrder: () => void }> = ({ onTrackOrder }) 
   );
 };
 
-const FailedState: React.FC<{ title: string; message: string; onTryAgain: () => void }> = ({
+const FailedState: React.FC<{
+  title: string;
+  message: string;
+  onTryAgain: () => void;
+  onCancel: () => void;
+  cancelling: boolean;
+  cancelError?: string;
+}> = ({
   title,
   message,
   onTryAgain,
+  onCancel,
+  cancelling,
+  cancelError,
 }) => {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -310,11 +320,36 @@ const FailedState: React.FC<{ title: string; message: string; onTryAgain: () => 
         {message}
       </Text>
       <TouchableOpacity
-        style={[styles.primaryAction, { backgroundColor: colors.secondary }]}
+        style={[styles.primaryAction, { backgroundColor: colors.secondary, opacity: cancelling ? 0.6 : 1 }]}
         onPress={onTryAgain}
+        disabled={cancelling}
         activeOpacity={0.85}
       >
         <Text style={[typography.labelLarge, { color: '#FFFFFF', fontWeight: '700' }]}>Try again</Text>
+      </TouchableOpacity>
+      {cancelError ? (
+        <Text
+          style={[
+            typography.bodySmall,
+            { color: colors.error, textAlign: 'center', marginTop: 12, paddingHorizontal: 8 },
+          ]}
+        >
+          {cancelError}
+        </Text>
+      ) : null}
+      <TouchableOpacity
+        style={[styles.secondaryAction, { borderColor: colors.divider }]}
+        onPress={onCancel}
+        disabled={cancelling}
+        activeOpacity={0.85}
+      >
+        {cancelling ? (
+          <ActivityIndicator size="small" color={colors.subtext} />
+        ) : (
+          <Text style={[typography.labelLarge, { color: colors.onSurface, fontWeight: '600' }]}>
+            Cancel order
+          </Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -361,6 +396,8 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   const [requestMessage, setRequestMessage] = useState(defaultRequestMessage);
   const [failTitle, setFailTitle] = useState('Payment not completed');
   const [failMessage, setFailMessage] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
   const verificationStarted = useRef(false);
   const navigatingAway = useRef(false);
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -426,7 +463,9 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
 
   const failVerification = (title: string, message: string) => {
     clearPollTimer();
+    pollCancelledRef.current = true;
     verificationStarted.current = false;
+    setCancelError('');
     setFailTitle(title);
     setFailMessage(message);
     setPhase('failed');
@@ -561,6 +600,41 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
 
   const onBack = () => navigation.goBack();
 
+  const handleCancelPayment = async () => {
+    if (cancelling) return;
+    if (!paymentId || !orderId) {
+      setCancelError('We could not identify this payment. Check your Orders tab.');
+      return;
+    }
+
+    setCancelling(true);
+    setCancelError('');
+    clearPollTimer();
+    pollCancelledRef.current = true;
+
+    try {
+      const result = await paymentService.cancelUnpaidPayment({ paymentId, orderId });
+      if (result.paid) {
+        // The cancellation check found a completed transaction. Let the server
+        // settle the order before showing success; a transient error here is
+        // safe because the webhook is still authoritative.
+        try {
+          await paymentService.verifyPaystackPayment(paymentId, reference);
+        } catch {
+          // Ignore: the order will settle from the webhook as well.
+        }
+        await cartService.clearCart();
+        setPhase('success');
+        return;
+      }
+      navigateHome();
+    } catch (e: any) {
+      setCancelError(e?.message || 'We could not cancel this order. Please try again.');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   if (phase === 'waiting') {
     return (
       <RequestSentState
@@ -576,7 +650,18 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
     );
   }
   if (phase === 'success') return <SuccessState onTrackOrder={goToTracking} />;
-  if (phase === 'failed') return <FailedState title={failTitle} message={failMessage} onTryAgain={onBack} />;
+  if (phase === 'failed') {
+    return (
+      <FailedState
+        title={failTitle}
+        message={failMessage}
+        onTryAgain={onBack}
+        onCancel={handleCancelPayment}
+        cancelling={cancelling}
+        cancelError={cancelError}
+      />
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
@@ -752,6 +837,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
+    minWidth: 220,
+  },
+  secondaryAction: {
+    marginTop: 12,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
     minWidth: 220,
   },
 });
