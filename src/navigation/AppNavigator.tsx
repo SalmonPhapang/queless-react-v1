@@ -21,6 +21,7 @@ import { AddressManagementScreen } from '../screens/Profile/AddressManagementScr
 import { NotificationInboxScreen } from '../screens/Profile/NotificationInboxScreen';
 import { EditProfileScreen } from '../screens/Profile/EditProfileScreen';
 import { FaqScreen } from '../screens/Profile/FaqScreen';
+import { SupportTicketsScreen } from '../screens/Profile/SupportTicketsScreen';
 import { AgeVerificationScreen } from '../screens/Auth/AgeVerificationScreen';
 import { VerifyPhoneOtpScreen } from '../screens/Auth/VerifyPhoneOtpScreen';
 import { QAiChatScreen } from '../screens/Main/QAiChatScreen';
@@ -58,6 +59,7 @@ export type RootStackParamList = {
   NotificationInbox: undefined;
   EditProfile: undefined;
   Faq: undefined;
+  SupportTickets: undefined;
   AgeVerification: undefined;
   QAiChat: undefined;
   ErrorScreen: {
@@ -104,6 +106,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="NotificationInbox" component={NotificationInboxScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Faq" component={FaqScreen} />
+      <Stack.Screen name="SupportTickets" component={SupportTicketsScreen} />
       <Stack.Screen name="AgeVerification" component={AgeVerificationScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="QAiChat" component={QAiChatScreen} />
       <Stack.Screen name="VerifyPhoneOtp" component={VerifyPhoneOtpScreen} />

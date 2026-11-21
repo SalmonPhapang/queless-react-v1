@@ -205,6 +205,23 @@ export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
           <TouchableOpacity
             style={[styles.menuItem, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}
+            onPress={() => navigation.navigate('SupportTickets')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuLeft}>
+              <Ionicons name="ticket-outline" size={20} color={colors.secondary} style={styles.menuIcon} />
+              <View>
+                <Text style={[typography.bodyMedium, { color: colors.onSurface }]}>My Support Tickets</Text>
+                <Text style={[typography.labelSmall, { color: colors.subtext }]}>
+                  Check tickets opened with Q
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}
             onPress={() => Alert.alert('Terms of Service', 'Quelless App v1.0.1 - South Africa region.')}
             activeOpacity={0.7}
           >

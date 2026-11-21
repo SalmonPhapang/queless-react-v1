@@ -1,12 +1,37 @@
-import { supabase } from '../config/supabaseClient';
+﻿import { supabase } from '../config/supabaseClient';
 import { Product } from '../models/product';
 import { Store } from '../models/store';
 import { storeService } from './storeService';
+import { authService } from './authService';
 import { appConfig } from '../config/appConfig';
+import { SUPPORT_UNAVAILABLE_REPLY, type SupportTopic } from '../utils/supportChat';
 
 // The deployed `ai-chat` function persists conversation turns itself, so the
-// client only needs to carry the conversation id between calls.
+// client only needs to carry the canonical backend conversation id.
 let conversationId: string | null = null;
+
+/** Canonical backend conversation id, used to link support tickets and cart attribution. */
+export const getConversationId = (): string | null => conversationId;
+
+/**
+ * Ensures we have a real `ai_conversations.id` before linking a support ticket
+ * or an AI-assisted cart. Never falls back to a client-generated fake id.
+ */
+export const ensureConversationId = async (): Promise<string | null> => {
+  if (conversationId) return conversationId;
+  const user = await authService.getCurrentSessionUser();
+  if (!user?.id) return null;
+
+  const { data, error } = await supabase
+    .from('ai_conversations')
+    .insert({ user_id: user.id, title: 'Ask Q support' })
+    .select('id')
+    .single();
+
+  if (error || !data?.id) return null;
+  conversationId = String(data.id);
+  return conversationId;
+};
 
 const extractBudgetAmount = (text: string): number | null => {
   const patterns = [
@@ -91,7 +116,21 @@ export interface QChatMessage {
   trackActions?: { label: string; orderId: string }[];
   selectableOrders?: QChatSelectableOrder[];
   issueOptions?: string[];
-  supportDraft?: { orderId: string; orderNumber: string; storeName: string; issue: string };
+  supportDraft?: {
+    orderId?: string;
+    orderNumber: string;
+    storeName: string;
+    issue: string;
+    category: SupportTopic;
+    details: string;
+    ticketId?: string;
+  };
+  supportTicket?: {
+    id: string;
+    status: string;
+    subject: string;
+    category: SupportTopic;
+  };
 }
 
 export const aiChatService = {
@@ -170,226 +209,20 @@ export const aiChatService = {
       console.warn('Q AI Edge Function error:', e);
     }
 
-    // Smart fallback AI response engine for local/offline/dev mode
-    const lower = messageText.toLowerCase();
-
-    if (lower.includes('burger') || lower.includes('food') || lower.includes('hungry') || lower.includes('craving')) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: `Here are some popular meals you might like for "${messageText}":`,
-        timestamp: new Date().toISOString(),
-        suggestedProducts: [
-          {
-            id: 'ai_prod_1',
-            name: 'Smokey Bacon & Cheese Burger',
-            category: 'burgers',
-            description: 'Flame-grilled patty with melted cheddar and crispy bacon',
-            basePrice: 85.0,
-            price: 95.63,
-            imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500',
-            isLocalBrand: true,
-            tags: ['Bestseller'],
-            productType: 'food',
-            stock: 50,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            optionGroups: [],
-          },
-          {
-            id: 'ai_prod_2',
-            name: 'Gourmet Truffle Fries',
-            category: 'snacks',
-            description: 'Hand-cut fries tossed in parmesan and truffle oil',
-            basePrice: 45.0,
-            price: 50.63,
-            imageUrl: 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=500',
-            isLocalBrand: true,
-            tags: ['Side'],
-            productType: 'food',
-            stock: 30,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            optionGroups: [],
-          },
-        ],
-        suggestions: [
-          '🍔 More burger options',
-          '🍕 Pizza & fast food',
-          '🥗 Halal & veggie options',
-          '💰 Meals under R100',
-          '⏱️ Quick delivery',
-          '👨‍👩‍👧 Family meals',
-        ],
-      };
-    }
-
-    if (lower.includes('pizza') || lower.includes('chicken') || lower.includes('wings') || lower.includes('wrap') || lower.includes('fast food')) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: `Looking for ${messageText}? I can help you find tasty options nearby. Try browsing stores or tell me your budget and dietary needs.`,
-        timestamp: new Date().toISOString(),
-        suggestions: [
-          '🍕 Show pizza deals',
-          '🍗 Chicken & wings',
-          '💰 Meals under R100',
-          '⏱️ Quick delivery',
-          '🥗 Halal & veggie options',
-          '👨‍👩‍👧 Family meals',
-        ],
-      };
-    }
-
-    if (lower.includes('halal') || lower.includes('vegetarian') || lower.includes('veggie') || lower.includes('vegan') || lower.includes('healthy') || lower.includes('gluten')) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: `I can help with dietary-friendly options like "${messageText}". Use the filter chips above or tell me what you’re in the mood for and your budget.`,
-        timestamp: new Date().toISOString(),
-        suggestions: [
-          '🥗 Halal meals near me',
-          '🥦 Vegetarian options',
-          '🌱 Vegan meals',
-          '💰 Healthy under R150',
-          '🍔 Best burgers near me',
-          '⏱️ Quick delivery',
-        ],
-      };
-    }
-
-    if (lower.includes('quick') || lower.includes('fast') || lower.includes('near') || lower.includes('close')) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: `Want something quick? I can suggest popular nearby options and fast meals. Tell me what you feel like (burgers, pizza, chicken, etc.) or your budget.`,
-        timestamp: new Date().toISOString(),
-        suggestions: [
-          '⏱️ Quick delivery meals',
-          '🍔 Best burgers near me',
-          '🍕 Pizza & fast food',
-          '💰 Meals under R100',
-          '👨‍👩‍👧 Family meals',
-          '🥗 Halal & veggie options',
-        ],
-      };
-    }
-
-    if (lower.includes('family') || lower.includes('group') || lower.includes('share') || lower.includes('kids')) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: `Planning for a family or group? Tell me how many people and your budget, and I can suggest shareable meals and deals.`,
-        timestamp: new Date().toISOString(),
-        suggestions: [
-          '👨‍👩‍👧 Family meals under R250',
-          '🍕 Pizza & sharing deals',
-          '🍔 Burger combos',
-          '🥤 Drinks & sides',
-          '💰 Meals under R100',
-          '⏱️ Quick delivery',
-        ],
-      };
-    }
-
-    if (lower.includes('status') || lower.includes('where is my order') || lower.includes('where my order') || lower.includes('track') || lower.includes('delivery status')) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: "I can help you track an active order. Tap **Track active order** below and I'll find your current order(s), show their status, and link you to live tracking.",
-        timestamp: new Date().toISOString(),
-        suggestions: [
-          'Track active order',
-          'I have an issue with an order',
-          '🍔 Best burgers near me',
-          '💰 Meals under R100',
-        ],
-      };
-    }
-
-    if (lower.includes('issue') || lower.includes('problem') || lower.includes('support') || lower.includes('complaint') || lower.includes('missing') || lower.includes('wrong') || lower.includes('damaged') || lower.includes('refund') || lower.includes('late') || lower.includes('not delivered') || lower.includes('did not receive')) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: "I'm here to help with an order issue. Tap **I have an issue with an order** below and I'll show your recent orders from the last 7 days (including active orders) so you can select one and report what went wrong.",
-        timestamp: new Date().toISOString(),
-        suggestions: [
-          'I have an issue with an order',
-          'Track active order',
-          '🍔 Browse meals',
-          '💰 Meals under R100',
-        ],
-      };
-    }
-
-    if (lower.includes('budget') || lower.includes('cheap') || lower.includes('under') || /\br\s?\d+/.test(lower) || lower.includes('deal')) {
-      const fallbackBudget = budget ?? 100;
-      const products = budgetProducts.length > 0 ? budgetProducts : await fetchProductsUnderBudget(fallbackBudget, messageText, 12);
-      if (products.length > 0) {
-        return {
-          id: `msg_${Date.now()}`,
-          sender: 'assistant',
-          text: `Here are **${products.length}** meal option${products.length === 1 ? '' : 's'} under **${appConfig.formatCurrency(fallbackBudget)}** I found for you:`,
-          timestamp: new Date().toISOString(),
-          suggestedProducts: products,
-          suggestions: [
-            `💰 Meals under ${appConfig.formatCurrency(fallbackBudget)}`,
-            '💸 Meals under R150',
-            '💸 Meals under R200',
-            '🍔 Best burgers near me',
-            '🍕 Pizza & fast food',
-            '🥗 Halal & veggie options',
-            '⏱️ Quick delivery',
-          ],
-        };
-      }
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: `I couldn't find meals under **${appConfig.formatCurrency(fallbackBudget)}** right now. Try a higher budget (for example **R150** or **R200**) or ask me for popular meals near you.`,
-        timestamp: new Date().toISOString(),
-        suggestions: [
-          '💸 Meals under R150',
-          '💸 Meals under R200',
-          '🍔 Best burgers near me',
-          '🍕 Pizza & fast food',
-          '⏱️ Quick delivery',
-          '📦 Track active order',
-        ],
-      };
-    }
-
-    if (lower.includes('drink') || lower.includes('dessert') || lower.includes('sweet') || lower.includes('ice cream') || lower.includes('cake')) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: `Craving something to drink or a sweet treat? I can help you find desserts, drinks, and snacks nearby.`,
-        timestamp: new Date().toISOString(),
-        suggestions: [
-          '🍰 Desserts & treats',
-          '🥤 Drinks & refreshments',
-          '🍔 Best burgers near me',
-          '💰 Meals under R100',
-          '⏱️ Quick delivery',
-          '👨‍👩‍👧 Family meals',
-        ],
-      };
-    }
-
+    // Honest local fallback when the AI edge function is unreachable. Never invent
+    // products or imply a ticket/order action was performed.
     return {
       id: `msg_${Date.now()}`,
       sender: 'assistant',
-      text: `Hi! I'm Q, your personal food and store assistant. How can I help you today? I can find dishes, recommend stores near you, help plan meals on a budget, track an active order, or help with an order issue.`,
+      text: SUPPORT_UNAVAILABLE_REPLY,
       timestamp: new Date().toISOString(),
       suggestions: [
-        '📦 Track active order',
-        '⚠️ I have an issue with an order',
-        '🍔 Best burgers near me',
-        '🍕 Pizza & fast food',
-        '🥗 Halal & veggie options',
-        '💰 Meals under R100',
-        '⏱️ Quick delivery',
-        '👨‍👩‍👧 Family meals',
+        '📦 Track my order',
+        '🛵 Delivery help',
+        '💳 Payment question',
+        '🚫 Cancel an order',
+        '🙋 Speak to a human',
+        '📚 Delivery & payment FAQs',
       ],
     };
   },

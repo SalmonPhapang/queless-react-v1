@@ -14,7 +14,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/theme';
-import { aiChatService, QChatMessage, QChatSelectableOrder } from '../../services/aiChatService';
+import {
+  aiChatService,
+  ensureConversationId,
+  QChatMessage,
+  QChatSelectableOrder,
+} from '../../services/aiChatService';
 import { ProductCard } from '../../components/ProductCard';
 import { addProductToCart } from '../../utils/cartActions';
 import { cartService } from '../../services/cartService';
@@ -22,36 +27,48 @@ import { Product } from '../../models/product';
 import { appConfig } from '../../config/appConfig';
 import { authService } from '../../services/authService';
 import { orderService } from '../../services/orderService';
+import { supportService } from '../../services/supportService';
 import { Order } from '../../models/order';
 import { orderStatusHelpers, orderStatusMeta } from '../../models/statuses';
+import {
+  ASSISTANT_DISCLOSURE,
+  ASSISTANT_NAME,
+  ASSISTANT_PRESENCE,
+  ASSISTANT_ROLE,
+  buildFaqReply,
+  buildTicketDescription,
+  buildTicketSubject,
+  detectSupportTopic,
+  HUMAN_HANDOFF_REPLY,
+  normalizeSupportText,
+  orderLabel,
+  replyForTopic,
+  statusLabel,
+  SUPPORT_ISSUE_OPTIONS,
+  SUPPORT_SUGGESTIONS,
+  SUPPORT_TOPIC_LABELS,
+  supportCategoryFromIssueLabel,
+  type SupportTopic,
+} from '../../utils/supportChat';
 
 export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
 
-  const conversationId = useRef(`q_conv_${Date.now()}`).current;
   const listRef = useRef<FlatList<QChatMessage>>(null);
 
   const [messages, setMessages] = useState<QChatMessage[]>([
     {
       id: 'msg_welcome',
       sender: 'assistant',
-      text: "👋 Hi there! I'm Q, your personal food & store assistant. Ask me anything about dishes, diet filters, budget meals, track an active order, or report an issue with a recent order!",
+      text: ASSISTANT_DISCLOSURE,
       timestamp: new Date().toISOString(),
-      suggestions: [
-        '📦 Track active order',
-        '⚠️ I have an issue with an order',
-        '🍔 Best burgers near me',
-        '🍕 Pizza & fast food',
-        '🥗 Halal & veggie options',
-        '💰 Meals under R100',
-        '⏱️ Quick delivery',
-        '👨‍👩‍👧 Family meals',
-      ],
+      suggestions: SUPPORT_SUGGESTIONS,
     },
   ]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ticketBusy, setTicketBusy] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [cartItemCount, setCartItemCount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
@@ -80,18 +97,6 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     };
   }, []);
 
-  const ISSUE_OPTIONS = [
-    'Missing items',
-    'Wrong items received',
-    'Damaged/spilled items',
-    'Order arrived very late',
-    'Food quality issue',
-    'Charged incorrectly',
-    'Did not receive order',
-    'Driver or delivery issue',
-    'Other issue',
-  ];
-
   const FILTER_OPTIONS = [
     'Halal',
     'Vegetarian',
@@ -119,7 +124,7 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
   useEffect(() => {
     scrollToLatestMessage(true);
-  }, [messages.length, loading]);
+  }, [messages.length, loading, ticketBusy]);
 
   const renderFormattedMessageText = (text: string, baseColor: string) => {
     const parts = text.split(/(\*\*[^*]+\*\*)/g).filter((part) => part.length > 0);
@@ -140,45 +145,6 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     });
   };
 
-  const normalize = (value: string) =>
-    value.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
-
-  const isTrackIntent = (n: string) =>
-    n === 'track active order' ||
-    n === 'track my order' ||
-    n === 'track order' ||
-    n === 'refresh active orders' ||
-    (n.includes('track') && n.includes('order')) ||
-    n.includes('where is my order') ||
-    n.includes('where my order') ||
-    n.includes('order status') ||
-    n.includes('delivery status') ||
-    n.includes('active order');
-
-  const isIssueIntent = (n: string) =>
-    n === 'i have an issue with an order' ||
-    n === 'i have an issue with another order' ||
-    n === 'report an order issue' ||
-    n.includes('issue with') ||
-    n.includes('order issue') ||
-    n.includes('problem with') ||
-    n.includes('complaint') ||
-    n.includes('support') ||
-    n.includes('refund') ||
-    n.includes('missing item') ||
-    n.includes('missing items') ||
-    n.includes('wrong item') ||
-    n.includes('wrong order') ||
-    n.includes('damaged') ||
-    n.includes('spilled') ||
-    n.includes('not delivered') ||
-    n.includes('never arrived') ||
-    n.includes('did not receive') ||
-    n.includes('charged incorrectly') ||
-    n.includes('late order') ||
-    n.includes('food quality') ||
-    n.includes('driver issue');
-
   const toSelectableOrder = (order: Order): QChatSelectableOrder => ({
     id: order.id,
     orderNumber: order.orderNumber || order.id.substring(0, 8).toUpperCase(),
@@ -189,141 +155,154 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     createdAt: order.createdAt,
   });
 
-  const getCurrentUserOrders = async (): Promise<{ userId: string; orders: Order[] } | null> => {
+  const getCurrentUserOrders = async (): Promise<Order[] | null> => {
     const user = await authService.getCurrentSessionUser();
     if (!user?.id) return null;
-    const orders = await orderService.getUserOrders(user.id);
-    return { userId: user.id, orders };
+    return orderService.getUserOrders(user.id);
   };
 
-  const buildActiveOrdersReply = (orders: Order[]): QChatMessage => {
+  const isRecent = (order: Order) => {
+    const t = new Date(order.createdAt).getTime();
+    return Number.isFinite(t) ? t >= Date.now() - 7 * 24 * 60 * 60 * 1000 : false;
+  };
+
+  const buildTopicReply = (topic: SupportTopic, orders: Order[]): QChatMessage => {
     const active = orders.filter((o) => !orderStatusHelpers.isTerminal(o.status));
-    if (active.length === 0) {
+    const recent = orders.filter(isRecent);
+    const source = topic === 'order_status' || topic === 'delivery' ? active : recent;
+    const visible = source.slice(0, 6);
+    const id = `msg_${Date.now()}`;
+
+    if (visible.length === 0) {
       return {
-        id: `msg_${Date.now()}`,
+        id,
         sender: 'assistant',
-        text: "You don't have any active orders right now. If you recently placed one, it may take a moment to appear.",
+        text:
+          topic === 'order_status' || topic === 'delivery'
+            ? "You don't have an active order right now. If you placed one recently, it may take a moment to appear — or I can open a ticket so a teammate can check."
+            : "I couldn't find an order from the last 7 days. Tell me a bit more and I can still open a support ticket for you.",
         timestamp: new Date().toISOString(),
-        suggestions: [
-          'I have an issue with an order',
-          '🍔 Browse burgers',
-          '🍕 Pizza & fast food',
-          '💰 Meals under R100',
-          '⏱️ Quick delivery',
-        ],
+        suggestions: ['🙋 Speak to a human', '📚 Delivery & payment FAQs', '📦 Track my order'],
       };
     }
-    const lines = active.slice(0, 5).map((o) => {
-      const label = orderStatusMeta[o.status]?.displayName || o.status;
-      return `• #${o.orderNumber || o.id.substring(0, 8).toUpperCase()} from ${o.storeName || 'Store'} — ${label} (${appConfig.formatCurrency(o.total)})`;
+
+    const lines = visible.map((order) => {
+      const prefix = `• ${orderLabel(order)} — **${statusLabel(order)}**`;
+      if (topic === 'payment') return `${prefix} · payment ${order.paymentStatus ?? 'pending'}`;
+      if (topic === 'delivery' && order.driver?.name) return `${prefix} · driver ${order.driver.name}`;
+      return `${prefix} · ${appConfig.formatCurrency(order.total)}`;
     });
+
+    const intro: Record<SupportTopic, string> = {
+      order_status: "Here's what I can see for your active orders:",
+      delivery:
+        "Here's the latest I have for delivery. Open tracking for live movement — if something looks wrong, pick the order and I'll open a ticket.",
+      payment:
+        "I can see your recent payment states. I won't guess at bank or card details — pick the order and I'll help or open a ticket.",
+      cancellation:
+        "I can check whether an order looks cancellable, but I won't change it without your go-ahead. Pick the order below.",
+      other:
+        "I can bring in a human teammate. Pick the order this is about, or add more detail below and I'll open a ticket.",
+    };
+
     return {
-      id: `msg_${Date.now()}`,
+      id,
       sender: 'assistant',
-      text: `I found ${active.length} active order${active.length === 1 ? '' : 's'}:\n${lines.join('\n')}\n\nTap below to open live tracking.`,
+      text: `${intro[topic]}\n${lines.join('\n')}`,
       timestamp: new Date().toISOString(),
-      trackActions: active.slice(0, 5).map((o) => ({
-        label: `Track #${o.orderNumber || o.id.substring(0, 8).toUpperCase()}`,
-        orderId: o.id,
-      })),
-      suggestions: ['I have an issue with an order', 'Refresh active orders'],
+      trackActions:
+        topic === 'order_status' || topic === 'delivery'
+          ? visible.map((o) => ({
+              label: `Track #${o.orderNumber || o.id.substring(0, 8).toUpperCase()}`,
+              orderId: o.id,
+            }))
+          : undefined,
+      selectableOrders: visible.map(toSelectableOrder),
+      suggestedAction: { type: 'view_order', payload: { supportTopic: topic } },
+      suggestions: ['📚 Delivery & payment FAQs', '🙋 Speak to a human', '📦 Track my order'],
     };
   };
 
-  const buildRecentOrdersIssueReply = (orders: Order[]): QChatMessage => {
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const recent = orders.filter((o) => {
-      const t = new Date(o.createdAt).getTime();
-      return Number.isFinite(t) ? t >= sevenDaysAgo : false;
-    });
-    if (recent.length === 0) {
-      return {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: "I couldn't find any orders from the last 7 days to report an issue for.",
-        timestamp: new Date().toISOString(),
-        suggestions: ['Track active order', '🍔 Browse burgers', '💰 Meals under R100'],
-      };
-    }
-    return {
-      id: `msg_${Date.now()}`,
-      sender: 'assistant',
-      text: "Select the order you had an issue with (from the last 7 days):",
-      timestamp: new Date().toISOString(),
-      selectableOrders: recent.slice(0, 8).map(toSelectableOrder),
-      suggestions: ['Track active order', 'I have an issue with another order'],
-    };
-  };
-
-  const handleSelectIssueOrder = (order: QChatSelectableOrder) => {
+  const handleSelectIssueOrder = (order: QChatSelectableOrder, topic: SupportTopic = 'other') => {
     const userMsg: QChatMessage = {
       id: `usr_${Date.now()}`,
       sender: 'user',
-      text: `Issue with order #${order.orderNumber} (${order.storeName})`,
+      text: `Help with order #${order.orderNumber} (${order.storeName})`,
       timestamp: new Date().toISOString(),
     };
     const assistantMsg: QChatMessage = {
       id: `msg_${Date.now() + 1}`,
       sender: 'assistant',
-      text: `What's the issue with order #${order.orderNumber} from ${order.storeName}? Choose one option below:`,
+      text: `What's going on with order #${order.orderNumber} from ${order.storeName}? Choose one option below, then add any detail and tap **Create support ticket**. I'm a virtual assistant; a human teammate will review the ticket.`,
       timestamp: new Date().toISOString(),
-      issueOptions: ISSUE_OPTIONS,
-      suggestedAction: { type: 'view_order', payload: { issueOrder: order } },
-    };
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
-  };
-
-  const handleSelectIssueType = (issue: string, order: QChatSelectableOrder) => {
-    const userMsg: QChatMessage = {
-      id: `usr_${Date.now()}`,
-      sender: 'user',
-      text: issue,
-      timestamp: new Date().toISOString(),
-    };
-    const assistantMsg: QChatMessage = {
-      id: `msg_${Date.now() + 1}`,
-      sender: 'assistant',
-      text: `Thanks — I've prepared a support request for order #${order.orderNumber} (${order.storeName}). You can add more details in the chat (e.g. what was missing or how you'd like us to help) and our support team can use this once ticket submission is connected.`,
-      timestamp: new Date().toISOString(),
-      supportDraft: {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        storeName: order.storeName,
-        issue,
+      issueOptions: SUPPORT_ISSUE_OPTIONS,
+      suggestedAction: {
+        type: 'view_order',
+        payload: { issueOrder: order, supportTopic: topic },
       },
-      trackActions: [{ label: `View order #${order.orderNumber}`, orderId: order.id }],
-      suggestions: ['Track active order', 'I have an issue with another order', '🍔 Browse burgers', '💰 Meals under R100'],
     };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
   };
 
-  const findLatestIssueDraft = (): { orderId: string; orderNumber: string; storeName: string; issue: string } | null => {
+  const handleSelectIssueType = (
+    issue: string,
+    order: QChatSelectableOrder,
+    contextTopic: SupportTopic
+  ) => {
+    const category = supportCategoryFromIssueLabel(issue);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `usr_${Date.now()}`,
+        sender: 'user',
+        text: `${SUPPORT_TOPIC_LABELS[category]} · #${order.orderNumber}`,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        id: `msg_${Date.now() + 1}`,
+        sender: 'assistant',
+        text: `Thanks — I've noted **${SUPPORT_TOPIC_LABELS[category]}** for order #${order.orderNumber}. Tell me a bit more below, then tap **Create support ticket**. A human teammate will pick it up from there.`,
+        timestamp: new Date().toISOString(),
+        supportDraft: {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          storeName: order.storeName,
+          issue,
+          category: contextTopic === 'other' ? category : contextTopic,
+          details: '',
+        },
+        trackActions: [{ label: `View order #${order.orderNumber}`, orderId: order.id }],
+        suggestions: ['📚 Delivery & payment FAQs', '📦 Track my order', '🙋 Speak to a human'],
+      },
+    ]);
+  };
+
+  const findLatestIssueDraft = (): number => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const draft = messages[i].supportDraft;
-      if (draft) return draft;
+      if (draft && !draft.ticketId) return i;
     }
-    return null;
+    return -1;
   };
 
-  const handleSupportIntent = async (intent: 'track' | 'issue') => {
+  const handleSupportIntent = async (topic: SupportTopic) => {
     setLoading(true);
     try {
-      const result = await getCurrentUserOrders();
-      if (!result) {
+      const orders = await getCurrentUserOrders();
+      if (orders === null) {
         setMessages((prev) => [
           ...prev,
           {
             id: `msg_${Date.now()}`,
             sender: 'assistant',
-            text: 'Please sign in to view and track your orders or report an issue. You can sign in from the Profile tab.',
+            text: 'Please sign in to check your orders or open a support ticket. You can sign in from the Profile tab.',
             timestamp: new Date().toISOString(),
-            suggestions: ['🍔 Browse burgers', '🍕 Pizza & fast food', '💰 Meals under R100', '⏱️ Quick delivery'],
+            suggestions: ['📚 Delivery & payment FAQs', '🙋 Speak to a human'],
           },
         ]);
         return;
       }
-      const reply = intent === 'track' ? buildActiveOrdersReply(result.orders) : buildRecentOrdersIssueReply(result.orders);
-      setMessages((prev) => [...prev, reply]);
+      setMessages((prev) => [...prev, buildTopicReply(topic, orders)]);
     } catch (e) {
       console.warn('Order support flow error:', e);
       setMessages((prev) => [
@@ -331,13 +310,84 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         {
           id: `msg_${Date.now()}`,
           sender: 'assistant',
-          text: "I couldn't load your orders right now. Please check your connection and try again.",
+          text: "I couldn't load your orders right now. Please check your connection and try again — or tell me more and I'll still open a ticket.",
           timestamp: new Date().toISOString(),
-          suggestions: ['Track active order', 'I have an issue with an order', '🍔 Browse burgers', '💰 Meals under R100'],
+          suggestions: ['🙋 Speak to a human', '📦 Track my order'],
         },
       ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleHumanHandoff = () => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg_${Date.now()}`,
+        sender: 'assistant',
+        text: HUMAN_HANDOFF_REPLY,
+        timestamp: new Date().toISOString(),
+        suggestions: ['📦 Track my order', '💳 Payment question', '🛵 Delivery help'],
+      },
+    ]);
+    void handleSupportIntent('other');
+  };
+
+  const handleCreateTicket = async (draftIndex: number) => {
+    const draft = messages[draftIndex]?.supportDraft;
+    if (!draft || ticketBusy) return;
+    setTicketBusy(true);
+    try {
+      const orders = await getCurrentUserOrders();
+      const order = orders?.find((o) => o.id === draft.orderId) ?? null;
+      const conversationId = await ensureConversationId();
+      const ticket = await supportService.createSupportTicket({
+        orderId: draft.orderId ?? null,
+        conversationId,
+        category: draft.category,
+        subject: buildTicketSubject(draft.category, order),
+        description: buildTicketDescription(draft.category, draft.details, order),
+      });
+
+      setMessages((prev) => {
+        const next = [...prev];
+        const existing = next[draftIndex];
+        if (existing?.supportDraft) {
+          next[draftIndex] = { ...existing, supportDraft: { ...existing.supportDraft, ticketId: ticket.id } };
+        }
+        return [
+          ...next,
+          {
+            id: `msg_${Date.now()}`,
+            sender: 'assistant',
+            text: `Support request **#${ticket.id.substring(0, 8).toUpperCase()}** is open (status: ${ticket.status}). A human teammate will review it in the app. I'm a virtual assistant — thanks for your patience.`,
+            timestamp: new Date().toISOString(),
+            supportTicket: {
+              id: ticket.id,
+              status: ticket.status,
+              subject: ticket.subject,
+              category: ticket.category,
+            },
+            suggestions: ['🎫 View my tickets', '📦 Track my order', 'Ask another question'],
+          },
+        ];
+      });
+      showToast('Support ticket created');
+    } catch (e) {
+      console.warn('Support ticket error:', e);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg_${Date.now()}`,
+          sender: 'assistant',
+          text: "I couldn't open the ticket just now. Your notes are still here — try again, or use the Profile tab to contact support another way.",
+          timestamp: new Date().toISOString(),
+          suggestions: ['Try again', '📦 Track my order', '🙋 Speak to a human'],
+        },
+      ]);
+    } finally {
+      setTicketBusy(false);
     }
   };
 
@@ -355,30 +405,81 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setMessages((prev) => [...prev, userMsg]);
     if (!textToSend) setInputText('');
 
-    const normalized = normalize(text);
+    const normalized = normalizeSupportText(text);
+    const topic = detectSupportTopic(text);
 
-    if (isTrackIntent(normalized)) {
-      await handleSupportIntent('track');
-      return;
-    }
-    if (isIssueIntent(normalized)) {
-      await handleSupportIntent('issue');
+    if (normalized === 'view my tickets' || normalized === 'my tickets' || normalized === 'tickets') {
+      navigation.navigate('SupportTickets');
       return;
     }
 
-    const issueDraft = findLatestIssueDraft();
-    if (issueDraft) {
-      const detailMsg: QChatMessage = {
-        id: `msg_${Date.now()}`,
-        sender: 'assistant',
-        text: `Got it — I've added your note to the support draft for order #${issueDraft.orderNumber} (${issueDraft.storeName}, "${issueDraft.issue}"). Our team can review this once ticket submission is connected.`,
-        timestamp: new Date().toISOString(),
-        supportDraft: { ...issueDraft },
-        trackActions: [{ label: `View order #${issueDraft.orderNumber}`, orderId: issueDraft.orderId }],
-        suggestions: ['Track active order', 'I have an issue with another order', '🍔 Browse burgers', '💰 Meals under R100'],
-      };
-      setMessages((prev) => [...prev, detailMsg]);
+    if (topic) {
+      if (topic === 'other' && /\b(human|person|agent|support team|speak to someone|talk to someone|ticket)\b/.test(normalized)) {
+        handleHumanHandoff();
+        return;
+      }
+      await handleSupportIntent(topic);
       return;
+    }
+
+    if (normalized === 'create support ticket') {
+      const openDraftIndex = findLatestIssueDraft();
+      if (openDraftIndex >= 0) {
+        await handleCreateTicket(openDraftIndex);
+        return;
+      }
+    }
+
+    const draftIndex = findLatestIssueDraft();
+    if (draftIndex >= 0) {
+      const existingMessage = messages[draftIndex];
+      const existing = existingMessage.supportDraft!;
+      setMessages((prev) => {
+        const next = [...prev];
+        next[draftIndex] = {
+          ...existingMessage,
+          supportDraft: {
+            ...existing,
+            details: `${existing.details ? `${existing.details}\n` : ''}${text}`,
+          },
+        };
+        return [
+          ...next,
+          {
+            id: `msg_${Date.now()}`,
+            sender: 'assistant',
+            text: `Got it — I've added that to the ticket notes for order #${existing.orderNumber}. Add anything else, then tap **Create support ticket**.`,
+            timestamp: new Date().toISOString(),
+            suggestions: ['Create support ticket', '📦 Track my order'],
+          },
+        ];
+      });
+      return;
+    }
+
+    if (normalized.includes('faq') || normalized.includes('help centre') || normalized.includes('help center')) {
+      setLoading(true);
+      try {
+        const articles = await supportService.listSupportArticles();
+        const answer = buildFaqReply(text, articles);
+        if (answer) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg_${Date.now()}`,
+              sender: 'assistant',
+              text: answer,
+              timestamp: new Date().toISOString(),
+              suggestions: ['🙋 Speak to a human', '📦 Track my order', '💳 Payment question'],
+            },
+          ]);
+          return;
+        }
+      } catch (e) {
+        console.warn('FAQ lookup failed:', e);
+      } finally {
+        setLoading(false);
+      }
     }
 
     const effectiveFilter = filterOverride === undefined ? activeFilter : filterOverride;
@@ -393,15 +494,15 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       });
       setMessages((prev) => [...prev, response]);
     } catch (e) {
-      console.warn('AI Chat Error:', e);
+      console.warn('Q AI Error:', e);
       setMessages((prev) => [
         ...prev,
         {
           id: `msg_${Date.now()}`,
           sender: 'assistant',
-          text: "I couldn't process that right now. Please try again, or tell me if you'd like to track an active order or report an order issue.",
+          text: "I couldn't process that right now. Please try again, or tell me if you need help with your order, delivery, payment or cancellation.",
           timestamp: new Date().toISOString(),
-          suggestions: ['Track active order', 'I have an issue with an order', '🍔 Best burgers near me', '💰 Meals under R100'],
+          suggestions: ['📦 Track my order', '🛵 Delivery help', '💳 Payment question', '🙋 Speak to a human'],
         },
       ]);
     } finally {
@@ -414,13 +515,14 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       showToast('This item cannot be added to cart right now');
       return;
     }
+    const conversationId = await ensureConversationId();
     const added = await addProductToCart({
       navigation,
       product,
       storeId: product.storeId,
       storeName: 'Recommended Store',
       aiAssisted: true,
-      aiConversationId: conversationId,
+      aiConversationId: conversationId ?? undefined,
     });
     if (added) {
       showToast(`${product.name} added to cart`);
@@ -449,7 +551,6 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       style={[styles.container, { backgroundColor: colors.surface }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Q Header */}
       <View
         style={[
           styles.header,
@@ -466,32 +567,31 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         </TouchableOpacity>
 
         <View style={styles.headerInfo}>
-          <View style={[styles.sparkleIcon, { backgroundColor: colors.secondary }]}>
-            <Ionicons name="sparkles" size={16} color="#FFFFFF" />
+          <View style={[styles.assistantAvatar, { backgroundColor: colors.secondary }]}>
+            <Ionicons name="person-circle-outline" size={22} color="#FFFFFF" />
           </View>
           <View style={{ marginLeft: 8, flex: 1 }}>
             <Text style={[typography.titleMedium, { color: colors.onSurface }]} numberOfLines={1}>
-              Q AI Assistant
+              {ASSISTANT_NAME} · {ASSISTANT_ROLE}
             </Text>
             <Text style={[typography.labelSmall, { color: colors.secondary }]} numberOfLines={1}>
-              Online • Smart Assistant
+              {ASSISTANT_PRESENCE}
             </Text>
           </View>
         </View>
 
         <TouchableOpacity
-          style={[styles.budgetButton, { backgroundColor: colors.primaryContainer, marginLeft: 8, marginRight: 6 }]}
-          onPress={() => navigation.navigate('BudgetMeals')}
+          style={[styles.ticketsButton, { backgroundColor: colors.primaryContainer, marginLeft: 8, marginRight: 6 }]}
+          onPress={() => navigation.navigate('SupportTickets')}
           activeOpacity={0.8}
         >
-          <Ionicons name="wallet-outline" size={16} color={colors.secondary} />
+          <Ionicons name="ticket-outline" size={16} color={colors.secondary} />
           <Text style={[typography.labelSmall, { color: colors.secondary, marginLeft: 4, fontWeight: '700' }]}>
-            Budget
+            Tickets
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Filter Chips Bar */}
       <View style={[styles.filterBar, { borderBottomColor: colors.divider }]}>
         <ScrollView
           horizontal
@@ -527,7 +627,6 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         </ScrollView>
       </View>
 
-      {/* Chat Messages */}
       <FlatList
         ref={listRef}
         data={messages}
@@ -555,6 +654,17 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                 : { backgroundColor: colors.cardBackground, borderColor: colors.divider },
             ]}
           >
+            {item.sender === 'assistant' ? (
+              <View style={styles.assistantIdentity}>
+                <View style={[styles.miniAvatar, { backgroundColor: colors.secondary }]}>
+                  <Text style={styles.miniAvatarText}>Q</Text>
+                </View>
+                <Text style={[typography.labelSmall, { color: colors.secondary, fontWeight: '700', marginLeft: 6 }]}>
+                  {ASSISTANT_NAME} · Virtual assistant
+                </Text>
+              </View>
+            ) : null}
+
             <Text
               style={[
                 typography.bodyMedium,
@@ -567,7 +677,6 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
               )}
             </Text>
 
-            {/* Suggested Products attached to message */}
             {item.suggestedProducts && item.suggestedProducts.length > 0 && (
               <View style={styles.productsBox}>
                 {item.suggestedProducts.map((prod) => (
@@ -583,14 +692,17 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
               </View>
             )}
 
-            {/* Action Buttons */}
-            {item.suggestedAction && item.suggestedAction.type === 'view_order' && item.suggestedAction.payload?.orderId && (
+            {item.suggestedAction && item.suggestedAction.type === 'view_order' && item.suggestedAction.payload?.issueOrder && (
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: colors.secondary }]}
-                onPress={() => navigation.navigate('OrderTracking', { orderId: item.suggestedAction?.payload.orderId })}
+                onPress={() =>
+                  navigation.navigate('OrderTracking', {
+                    orderId: item.suggestedAction?.payload.issueOrder.orderId,
+                  })
+                }
               >
                 <Ionicons name="map-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={[typography.titleSmall, { color: '#FFFFFF' }]}>Track Order</Text>
+                <Text style={[typography.titleSmall, { color: '#FFFFFF' }]}>View order</Text>
               </TouchableOpacity>
             )}
 
@@ -615,7 +727,12 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                   <TouchableOpacity
                     key={order.id}
                     style={[styles.orderChoice, { borderColor: colors.divider, backgroundColor: colors.surface }]}
-                    onPress={() => handleSelectIssueOrder(order)}
+                    onPress={() =>
+                      handleSelectIssueOrder(
+                        order,
+                        (item.suggestedAction?.payload?.supportTopic as SupportTopic) ?? 'other'
+                      )
+                    }
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={[typography.titleSmall, { color: colors.onSurface, fontWeight: '700' }]}>
@@ -637,7 +754,13 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                   <TouchableOpacity
                     key={idx}
                     style={[styles.suggestionChip, { backgroundColor: colors.primaryContainer }]}
-                    onPress={() => handleSelectIssueType(opt, item.suggestedAction!.payload.issueOrder as QChatSelectableOrder)}
+                    onPress={() =>
+                      handleSelectIssueType(
+                        opt,
+                        item.suggestedAction!.payload.issueOrder as QChatSelectableOrder,
+                        (item.suggestedAction!.payload.supportTopic as SupportTopic) ?? 'other'
+                      )
+                    }
                   >
                     <Text style={[typography.labelSmall, { color: colors.secondary, fontWeight: '600' }]}>
                       {opt}
@@ -650,7 +773,7 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             {item.supportDraft && (
               <View style={[styles.supportDraft, { borderColor: colors.divider, backgroundColor: colors.surface }]}>
                 <Text style={[typography.labelSmall, { color: colors.secondary, fontWeight: '700', marginBottom: 4 }]}>
-                  SUPPORT REQUEST (DRAFT)
+                  {item.supportDraft.ticketId ? 'SUPPORT REQUEST · TICKET OPEN' : 'SUPPORT REQUEST · READY TO SEND'}
                 </Text>
                 <Text style={[typography.bodySmall, { color: colors.onSurface }]}>
                   Order #{item.supportDraft.orderNumber} · {item.supportDraft.storeName}
@@ -658,10 +781,42 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                 <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 2 }]}>
                   Issue: {item.supportDraft.issue}
                 </Text>
+                {item.supportDraft.details ? (
+                  <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 4 }]}>
+                    Notes: {item.supportDraft.details}
+                  </Text>
+                ) : null}
+                {!item.supportDraft.ticketId ? (
+                  <TouchableOpacity
+                    style={[styles.secondaryActionBtn, { backgroundColor: colors.secondary, marginTop: 10 }]}
+                    onPress={() => handleCreateTicket(messages.indexOf(item))}
+                    disabled={ticketBusy}
+                  >
+                    {ticketBusy ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Ionicons name="send-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    )}
+                    <Text style={[typography.titleSmall, { color: '#FFFFFF' }]}>Create support ticket</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             )}
 
-            {/* Suggestion Chips */}
+            {item.supportTicket && (
+              <View style={[styles.ticketCard, { borderColor: colors.divider, backgroundColor: colors.surface }]}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.secondary} />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={[typography.titleSmall, { color: colors.onSurface, fontWeight: '700' }]}>
+                    Ticket #{item.supportTicket.id.substring(0, 8).toUpperCase()} · {item.supportTicket.status}
+                  </Text>
+                  <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 2 }]} numberOfLines={2}>
+                    {item.supportTicket.subject}
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {item.suggestions && item.suggestions.length > 0 && (
               <View style={styles.suggestionsContainer}>
                 {item.suggestions.map((sug, idx) => (
@@ -714,11 +869,10 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         </TouchableOpacity>
       ) : null}
 
-      {/* Input Field Bar */}
       <View style={[styles.inputBar, { backgroundColor: colors.appBarBackground, borderTopColor: colors.divider }]}>
         <TextInput
           style={[styles.input, { color: colors.onSurface, backgroundColor: colors.cardBackground, borderColor: colors.divider }]}
-          placeholder="Ask Q: track orders, report issues, find meals..."
+          placeholder="Ask Q about your order, delivery or payment..."
           placeholderTextColor={colors.subtext}
           value={inputText}
           onChangeText={setInputText}
@@ -729,7 +883,7 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         <TouchableOpacity
           style={[styles.sendButton, { backgroundColor: colors.secondary }]}
           onPress={() => handleSend()}
-          disabled={loading || !inputText.trim()}
+          disabled={loading || ticketBusy || !inputText.trim()}
           activeOpacity={0.8}
         >
           {loading ? (
@@ -757,7 +911,7 @@ const styles = StyleSheet.create({
   backButton: {
     marginRight: 12,
   },
-  budgetButton: {
+  ticketsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -769,10 +923,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  sparkleIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  assistantAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -799,7 +953,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 16,
     marginBottom: 14,
-    maxWidth: '85%',
+    maxWidth: '90%',
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -809,6 +963,23 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 4,
     borderWidth: 1,
+  },
+  assistantIdentity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  miniAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
   productsBox: {
     marginTop: 10,
@@ -828,6 +999,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 10,
   },
+  secondaryActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
   orderChoice: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -841,6 +1020,14 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderRadius: 10,
+  },
+  ticketCard: {
+    marginTop: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   suggestionsContainer: {
     flexDirection: 'row',
@@ -923,6 +1110,6 @@ const styles = StyleSheet.create({
   fabBadgeText: {
     color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 });
