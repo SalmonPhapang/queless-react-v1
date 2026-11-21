@@ -2,6 +2,11 @@ import { supabase } from '../config/supabaseClient';
 import { Product } from '../models/product';
 import { storeService } from './storeService';
 import { cartService } from './cartService';
+import { budgetBasketCanCheckout } from '../utils/budgetBasket';
+import type { BudgetBasket, BudgetBasketMissing } from '../utils/budgetBasket';
+
+export type { BudgetBasket, BudgetBasketMissing } from '../utils/budgetBasket';
+export { budgetBasketCanCheckout, canOpenBudgetBasket } from '../utils/budgetBasket';
 
 /**
  * Port of lib/services/budget_meal_service.dart (Q AI Phase 15).
@@ -41,26 +46,6 @@ export interface BudgetMealPlan {
   recipes: BudgetPlanRecipe[];
   products: BudgetPlanProduct[];
   isRecipeBased: boolean;
-}
-
-export interface BudgetBasketMissing {
-  name?: string;
-  quantity?: string;
-  reason?: string;
-}
-
-export interface BudgetBasket {
-  storeId?: string;
-  storeName?: string;
-  itemCount: number;
-  totalCost: number;
-  perPersonCost: number;
-  servings: number;
-  withinBudget: boolean;
-  budgetHeadroom?: number | null;
-  missing: BudgetBasketMissing[];
-  products: Product[];
-  warning?: string;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -196,9 +181,6 @@ export const budgetBasketHasWarning = (basket: BudgetBasket): boolean =>
 
 export const budgetBasketHasMissing = (basket: BudgetBasket): boolean =>
   basket.missing.length > 0;
-
-export const budgetBasketCanCheckout = (basket: BudgetBasket): boolean =>
-  !!basket.storeId && basket.products.length > 0;
 
 const isSignedIn = async (): Promise<boolean> => {
   const { data } = await supabase.auth.getSession();

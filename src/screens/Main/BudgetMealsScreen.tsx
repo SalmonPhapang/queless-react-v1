@@ -13,11 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/theme';
 import { Header } from '../../components/Header';
 import {
-  BudgetBasket,
   BudgetMealPlan,
   budgetMealService,
+  canOpenBudgetBasket,
 } from '../../services/budgetMealService';
-import { cartService } from '../../services/cartService';
 import { appConfig } from '../../config/appConfig';
 import { Skeleton } from '../../components/Skeleton';
 
@@ -32,14 +31,11 @@ export const BudgetMealsScreen: React.FC<{ navigation: any }> = ({ navigation })
   const [budget, setBudget] = useState('150');
   const [servings, setServings] = useState('2');
   const [plans, setPlans] = useState<BudgetMealPlan[]>([]);
-  const [basket, setBasket] = useState<BudgetBasket | null>(null);
   const [loading, setLoading] = useState(false);
-  const [adding, setAdding] = useState(false);
   const [searched, setSearched] = useState(false);
 
   const search = async () => {
     setLoading(true);
-    setBasket(null);
     try {
       const parsedBudget = Number(budget);
       const parsedServings = Number(servings);
@@ -55,6 +51,7 @@ export const BudgetMealsScreen: React.FC<{ navigation: any }> = ({ navigation })
   };
 
   const choosePlan = async (plan: BudgetMealPlan) => {
+    if (loading) return;
     setLoading(true);
     try {
       const built = await budgetMealService.buildBasket({
@@ -70,34 +67,23 @@ export const BudgetMealsScreen: React.FC<{ navigation: any }> = ({ navigation })
         servings: Number(servings) || undefined,
       });
 
-      if (!built) {
-        Alert.alert('No basket available', 'We could not build a basket for this plan.');
+      if (!canOpenBudgetBasket(built)) {
+        Alert.alert(
+          'No basket available',
+          'No approved store could match enough items for this plan. Try another plan or a higher budget.'
+        );
         return;
       }
-      setBasket(built);
+
+      // Leave the plan list so the successful RPC has a visible destination
+      // instead of silently appending a card further down the same screen.
+      navigation.navigate('BudgetBasket', {
+        basket: built,
+        budget: Number(budget) || undefined,
+        servings: Number(servings) || undefined,
+      });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const addBasketToCart = async () => {
-    if (!basket) return;
-    setAdding(true);
-    try {
-      const added = await budgetMealService.addAllToCart(basket);
-      await cartService.markAiAssisted();
-      Alert.alert(
-        'Added to cart',
-        added > 0
-          ? `${added} item${added === 1 ? '' : 's'} from ${basket.storeName || 'the store'} are in your cart.`
-          : 'None of these items could be added.',
-        [
-          { text: 'Keep browsing', style: 'cancel' },
-          { text: 'View cart', onPress: () => navigation.navigate('Cart') },
-        ]
-      );
-    } finally {
-      setAdding(false);
     }
   };
 
@@ -181,6 +167,7 @@ export const BudgetMealsScreen: React.FC<{ navigation: any }> = ({ navigation })
             key={`${plan.planId}-${plan.title}`}
             style={[styles.planCard, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}
             onPress={() => void choosePlan(plan)}
+            disabled={loading}
             activeOpacity={0.85}
           >
             <View style={styles.planHeader}>
@@ -209,50 +196,6 @@ export const BudgetMealsScreen: React.FC<{ navigation: any }> = ({ navigation })
             )}
           </TouchableOpacity>
         ))}
-
-        {basket && (
-          <View style={[styles.basketCard, { backgroundColor: colors.cardBackground, borderColor: colors.secondary }]}>
-            <Text style={[typography.titleMedium, { color: colors.onSurface }]}>
-              {basket.storeName || 'Basket'}
-            </Text>
-            <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 4 }]}>
-              {basket.itemCount} items • {appConfig.formatCurrency(basket.totalCost)} •{' '}
-              {basket.withinBudget ? 'Within budget' : 'Over budget'}
-            </Text>
-
-            {basket.products.map((product) => (
-              <View key={product.id} style={styles.basketRow}>
-                <Text style={[typography.bodySmall, { color: colors.onSurface, flex: 1 }]} numberOfLines={1}>
-                  {product.name}
-                </Text>
-                <Text style={[typography.bodySmall, { color: colors.subtext }]}>
-                  {appConfig.formatCurrency(product.price)}
-                </Text>
-              </View>
-            ))}
-
-            {basket.missing.length > 0 && (
-              <Text style={[typography.labelSmall, { color: colors.error, marginTop: 8 }]}>
-                Unavailable: {basket.missing.map((item) => item.name || 'item').join(', ')}
-              </Text>
-            )}
-
-            <TouchableOpacity
-              style={[styles.searchBtn, { backgroundColor: colors.secondary, marginTop: 16 }]}
-              onPress={() => void addBasketToCart()}
-              disabled={adding}
-              activeOpacity={0.85}
-            >
-              {adding ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={[typography.titleSmall, { color: '#FFFFFF', fontWeight: '800' }]}>
-                  Add {basket.itemCount} items to cart
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
       </ScrollView>
     </View>
   );
@@ -267,6 +210,4 @@ const styles = StyleSheet.create({
   planCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 12 },
   planHeader: { flexDirection: 'row', alignItems: 'center' },
   recipeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  basketCard: { borderWidth: 1.5, borderRadius: 14, padding: 16, marginTop: 20 },
-  basketRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
 });

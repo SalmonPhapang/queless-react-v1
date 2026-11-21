@@ -6,6 +6,7 @@ import { MainTabNavigator, MainTabParamList } from './MainTabNavigator';
 import { OnboardingScreen } from '../screens/Onboarding/OnboardingScreen';
 import { LocationPermissionScreen } from '../screens/Onboarding/LocationPermissionScreen';
 import { BudgetMealsScreen } from '../screens/Main/BudgetMealsScreen';
+import { BudgetBasketScreen } from '../screens/Main/BudgetBasketScreen';
 import { BrowseScreen } from '../screens/Main/BrowseScreen';
 import { FavoritesScreen } from '../screens/Profile/FavoritesScreen';
 import { StoreDetailScreen } from '../screens/Store/StoreDetailScreen';
@@ -29,6 +30,7 @@ import { ErrorScreen } from '../screens/Shared/ErrorScreen';
 import { Product } from '../models/product';
 import { Store } from '../models/store';
 import type { CheckoutPaymentMethod } from '../utils/paymentMethod';
+import type { BudgetBasket } from '../services/budgetMealService';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -37,6 +39,7 @@ export type RootStackParamList = {
   LocationPermission: undefined;
   Favorites: undefined;
   BudgetMeals: { budget?: number } | undefined;
+  BudgetBasket: { basket: BudgetBasket; budget?: number; servings?: number };
   Browse: { search?: string } | undefined;
   MainTabs: { screen?: keyof MainTabParamList; params?: any } | undefined;
   StoreDetail: { storeId: string };
@@ -87,6 +90,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="LocationPermission" component={LocationPermissionScreen} />
       <Stack.Screen name="Favorites" component={FavoritesScreen} />
       <Stack.Screen name="BudgetMeals" component={BudgetMealsScreen} />
+      <Stack.Screen name="BudgetBasket" component={BudgetBasketScreen} />
       <Stack.Screen name="Browse" component={BrowseScreen} />
       <Stack.Screen name="MainTabs" component={MainTabNavigator} />
       <Stack.Screen name="StoreDetail" component={StoreDetailScreen} />
