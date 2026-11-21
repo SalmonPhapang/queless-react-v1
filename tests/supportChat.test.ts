@@ -7,9 +7,12 @@ import {
   buildFaqReply,
   buildTicketDescription,
   buildTicketSubject,
+  detectShoppingIntent,
   detectSupportTopic,
+  GENERAL_SUGGESTIONS,
   paymentReply,
   replyForTopic,
+  SHOPPING_UNAVAILABLE_REPLY,
   SUPPORT_UNAVAILABLE_REPLY,
   supportCategoryFromIssueLabel,
 } from '../src/utils/supportChat';
@@ -70,9 +73,25 @@ test('support replies are read-only and never promise a refund or cancellation',
   assert.match(delivered, /can't be cancelled/i);
 });
 
-test('assistant identity is warm and honest about being virtual', () => {
+test('assistant identity is warm, honest about being virtual, and covers shopping', () => {
   assert.match(ASSISTANT_DISCLOSURE, /virtual support assistant/i);
   assert.match(ASSISTANT_DISCLOSURE, /Q/);
+  assert.match(ASSISTANT_DISCLOSURE, /find meals and stores/i);
+});
+
+test('shopping intents stay with Q without turning into support tickets', () => {
+  assert.equal(detectShoppingIntent('Best burgers near me'), true);
+  assert.equal(detectShoppingIntent('Meals under R100'), true);
+  assert.equal(detectShoppingIntent('Show me vegetarian options'), true);
+  assert.equal(detectShoppingIntent('Best burgers with quick delivery'), true);
+  assert.equal(detectShoppingIntent('Where is my order?'), false);
+  assert.equal(detectShoppingIntent('How long does delivery take?'), false);
+  assert.equal(detectShoppingIntent('I was charged twice for a burger'), false);
+
+  assert.match(SHOPPING_UNAVAILABLE_REPLY, /won't invent meals or prices/i);
+  assert.match(SHOPPING_UNAVAILABLE_REPLY, /in-app ticket/i);
+  assert.match(GENERAL_SUGGESTIONS.join(' '), /burgers/i);
+  assert.match(GENERAL_SUGGESTIONS.join(' '), /Track my order/i);
 });
 
 test('unavailable fallback is honest and points to an in-app ticket', () => {

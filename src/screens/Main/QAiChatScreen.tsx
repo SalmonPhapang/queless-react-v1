@@ -38,14 +38,15 @@ import {
   buildFaqReply,
   buildTicketDescription,
   buildTicketSubject,
+  detectShoppingIntent,
   detectSupportTopic,
+  GENERAL_SUGGESTIONS,
   HUMAN_HANDOFF_REPLY,
   normalizeSupportText,
   orderLabel,
   replyForTopic,
   statusLabel,
   SUPPORT_ISSUE_OPTIONS,
-  SUPPORT_SUGGESTIONS,
   SUPPORT_TOPIC_LABELS,
   supportCategoryFromIssueLabel,
   type SupportTopic,
@@ -63,7 +64,7 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       sender: 'assistant',
       text: ASSISTANT_DISCLOSURE,
       timestamp: new Date().toISOString(),
-      suggestions: SUPPORT_SUGGESTIONS,
+      suggestions: GENERAL_SUGGESTIONS,
     },
   ]);
   const [inputText, setInputText] = useState('');
@@ -406,7 +407,8 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     if (!textToSend) setInputText('');
 
     const normalized = normalizeSupportText(text);
-    const topic = detectSupportTopic(text);
+    const shoppingIntent = detectShoppingIntent(text);
+    const topic = shoppingIntent ? null : detectSupportTopic(text);
 
     if (normalized === 'view my tickets' || normalized === 'my tickets' || normalized === 'tickets') {
       navigation.navigate('SupportTickets');
@@ -431,7 +433,7 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     }
 
     const draftIndex = findLatestIssueDraft();
-    if (draftIndex >= 0) {
+    if (draftIndex >= 0 && !shoppingIntent) {
       const existingMessage = messages[draftIndex];
       const existing = existingMessage.supportDraft!;
       setMessages((prev) => {
@@ -500,9 +502,9 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         {
           id: `msg_${Date.now()}`,
           sender: 'assistant',
-          text: "I couldn't process that right now. Please try again, or tell me if you need help with your order, delivery, payment or cancellation.",
+          text: "I couldn't process that right now. Please try again, or tell me what you need — I can help with meals and stores, or with an order, delivery or payment question.",
           timestamp: new Date().toISOString(),
-          suggestions: ['📦 Track my order', '🛵 Delivery help', '💳 Payment question', '🙋 Speak to a human'],
+          suggestions: GENERAL_SUGGESTIONS,
         },
       ]);
     } finally {
@@ -581,14 +583,23 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         </View>
 
         <TouchableOpacity
-          style={[styles.ticketsButton, { backgroundColor: colors.primaryContainer, marginLeft: 8, marginRight: 6 }]}
-          onPress={() => navigation.navigate('SupportTickets')}
+          style={[styles.headerAction, { backgroundColor: colors.primaryContainer, marginLeft: 8 }]}
+          onPress={() => navigation.navigate('BudgetMeals')}
+          accessibilityLabel="Budget meals"
+          accessibilityRole="button"
           activeOpacity={0.8}
         >
-          <Ionicons name="ticket-outline" size={16} color={colors.secondary} />
-          <Text style={[typography.labelSmall, { color: colors.secondary, marginLeft: 4, fontWeight: '700' }]}>
-            Tickets
-          </Text>
+          <Ionicons name="wallet-outline" size={18} color={colors.secondary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.headerAction, { backgroundColor: colors.primaryContainer, marginLeft: 6, marginRight: 4 }]}
+          onPress={() => navigation.navigate('SupportTickets')}
+          accessibilityLabel="Support tickets"
+          accessibilityRole="button"
+          activeOpacity={0.8}
+        >
+          <Ionicons name="ticket-outline" size={18} color={colors.secondary} />
         </TouchableOpacity>
       </View>
 
@@ -872,7 +883,7 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       <View style={[styles.inputBar, { backgroundColor: colors.appBarBackground, borderTopColor: colors.divider }]}>
         <TextInput
           style={[styles.input, { color: colors.onSurface, backgroundColor: colors.cardBackground, borderColor: colors.divider }]}
-          placeholder="Ask Q about your order, delivery or payment..."
+          placeholder="Ask Q about meals, orders, delivery or payment..."
           placeholderTextColor={colors.subtext}
           value={inputText}
           onChangeText={setInputText}
@@ -911,12 +922,12 @@ const styles = StyleSheet.create({
   backButton: {
     marginRight: 12,
   },
-  ticketsButton: {
-    flexDirection: 'row',
+  headerAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
   },
   headerInfo: {
     flexDirection: 'row',

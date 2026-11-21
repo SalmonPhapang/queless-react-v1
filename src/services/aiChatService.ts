@@ -4,7 +4,13 @@ import { Store } from '../models/store';
 import { storeService } from './storeService';
 import { authService } from './authService';
 import { appConfig } from '../config/appConfig';
-import { SUPPORT_UNAVAILABLE_REPLY, type SupportTopic } from '../utils/supportChat';
+import {
+  GENERAL_SUGGESTIONS,
+  detectShoppingIntent,
+  SHOPPING_UNAVAILABLE_REPLY,
+  SUPPORT_UNAVAILABLE_REPLY,
+  type SupportTopic,
+} from '../utils/supportChat';
 
 // The deployed `ai-chat` function persists conversation turns itself, so the
 // client only needs to carry the canonical backend conversation id.
@@ -24,7 +30,7 @@ export const ensureConversationId = async (): Promise<string | null> => {
 
   const { data, error } = await supabase
     .from('ai_conversations')
-    .insert({ user_id: user.id, title: 'Ask Q support' })
+    .insert({ user_id: user.id, title: 'Ask Q' })
     .select('id')
     .single();
 
@@ -211,19 +217,13 @@ export const aiChatService = {
 
     // Honest local fallback when the AI edge function is unreachable. Never invent
     // products or imply a ticket/order action was performed.
+    const shoppingIntent = detectShoppingIntent(messageText);
     return {
       id: `msg_${Date.now()}`,
       sender: 'assistant',
-      text: SUPPORT_UNAVAILABLE_REPLY,
+      text: shoppingIntent ? SHOPPING_UNAVAILABLE_REPLY : SUPPORT_UNAVAILABLE_REPLY,
       timestamp: new Date().toISOString(),
-      suggestions: [
-        '📦 Track my order',
-        '🛵 Delivery help',
-        '💳 Payment question',
-        '🚫 Cancel an order',
-        '🙋 Speak to a human',
-        '📚 Delivery & payment FAQs',
-      ],
+      suggestions: GENERAL_SUGGESTIONS,
     };
   },
 };

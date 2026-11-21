@@ -4,17 +4,20 @@ import { orderStatusMeta, orderStatusHelpers } from '../models/statuses';
 export type SupportTopic = 'order_status' | 'delivery' | 'payment' | 'cancellation' | 'other';
 
 export const ASSISTANT_NAME = 'Q';
-export const ASSISTANT_ROLE = 'Your Queless support assistant';
+export const ASSISTANT_ROLE = 'Shopping + support assistant';
 export const ASSISTANT_PRESENCE = 'Virtual assistant • here to help';
 
 export const ASSISTANT_DISCLOSURE =
-  "Hi, I'm Q — a virtual support assistant for Queless. I can check your order details, explain what's happening, and open an in-app ticket when a human teammate needs to step in.";
+  "Hi, I'm Q — a virtual support assistant for Queless. I can help you find meals and stores, check your order, delivery or payment, and open an in-app ticket when a human teammate needs to step in.";
 
 export const HUMAN_HANDOFF_REPLY =
   "I can bring a human teammate in. I'll open a support ticket in the app with this chat and your order details attached, then they can take it from here. I'm a virtual assistant, not a real person.";
 
 export const SUPPORT_UNAVAILABLE_REPLY =
-  "I'm Q, your virtual support assistant, but I can't reach my live help right now so I won't guess about your order. Please try again in a moment, or open an in-app support ticket if you need a human teammate.";
+  "I'm Q, your virtual support assistant, but I can't reach my live help right now so I won't guess about your order or invent products. Please try again in a moment, browse stores from the home tab, or open an in-app support ticket if you need a human teammate.";
+
+export const SHOPPING_UNAVAILABLE_REPLY =
+  "I'm Q, your virtual support assistant, but I can't reach live recommendations right now so I won't invent meals or prices. Please try again, or browse Food and Liquor from the home tab. I can still open an in-app ticket for order help.";
 
 export const SUPPORT_TOPIC_LABELS: Record<SupportTopic, string> = {
   order_status: 'Order status',
@@ -39,6 +42,22 @@ export const SUPPORT_SUGGESTIONS: string[] = [
   '🚫 Cancel an order',
   '🙋 Speak to a human',
   '📚 Delivery & payment FAQs',
+];
+
+export const SHOPPING_SUGGESTIONS: string[] = [
+  '🍔 Best burgers near me',
+  '💰 Meals under R100',
+  '🥗 Halal & veggie options',
+  '⏱️ Quick delivery',
+];
+
+export const GENERAL_SUGGESTIONS: string[] = [
+  '🍔 Best burgers near me',
+  '💰 Meals under R100',
+  '📦 Track my order',
+  '🛵 Delivery help',
+  '💳 Payment question',
+  '🙋 Speak to a human',
 ];
 
 export function normalizeSupportText(value: string): string {
@@ -138,6 +157,25 @@ export function detectSupportTopic(value: string): SupportTopic | null {
     return 'order_status';
   }
   return null;
+}
+
+/**
+ * Shopping questions still reach the same Q assistant. Explicit support
+ * language wins so a refund/tracking question never falls through to catalog
+ * search just because it mentions a meal or store.
+ */
+export function detectShoppingIntent(value: string): boolean {
+  const n = normalizeSupportText(value);
+  if (!n) return false;
+
+  const supportOverride =
+    /\b(refund|track|order status|where is my order|cancel|charge|charged|paid twice|missing item|wrong item|damaged|spilled|not delivered|did not arrive|human|agent|ticket|support team|complaint)\b/;
+  if (supportOverride.test(n)) return false;
+
+  const shoppingTerms =
+    /\b(browse|find|show|suggest|recommend|looking for|meal|meals|food|eat|burger|burgers|pizza|chicken|wings|snack|snacks|drink|drinks|dessert|store|stores|dish|dishes|cuisine|halal|veggie|vegetarian|vegan|gluten free|spicy|healthy|budget|cheap|affordable|recipe|recipes)\b/;
+  const budgetTerm = /\br\s?\d+|\b\d+\s*rand\b|\bunder r\s?\d+\b/;
+  return shoppingTerms.test(n) || budgetTerm.test(n);
 }
 
 export function supportCategoryFromIssueLabel(label: string): SupportTopic {
