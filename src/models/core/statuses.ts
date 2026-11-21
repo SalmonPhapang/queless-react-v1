@@ -108,6 +108,30 @@ export const orderStatusHelpers = {
   isTerminal: (status: OrderStatus): boolean => TERMINAL_ORDER_STATUSES.includes(status),
 };
 
+/** Order and payment values both use 'awaiting_payment' for an unpaid order. */
+export function isAwaitingPaymentStatus(status?: string | null): boolean {
+  return orderStatusFromDatabaseValue(status ?? undefined) === 'awaiting_payment';
+}
+
+/**
+ * Awaiting payment means no delivery exists yet. Cash on delivery keeps a
+ * pending payment status but is still trackable after store acceptance.
+ */
+export function isAwaitingPaymentOrder(order: {
+  status?: string | null;
+  paymentStatus?: string | null;
+}): boolean {
+  return isAwaitingPaymentStatus(order.status) || isAwaitingPaymentStatus(order.paymentStatus);
+}
+
+export function canTrackOrder(order: {
+  status?: string | null;
+  paymentStatus?: string | null;
+}): boolean {
+  const status = orderStatusFromDatabaseValue(order.status ?? undefined);
+  return !orderStatusHelpers.isTerminal(status) && !isAwaitingPaymentOrder(order);
+}
+
 const ORDER_STATUS_ALIASES: Record<string, OrderStatus> = {
   confirmed: 'awaiting_store_acceptance',
   delivering: 'out_for_delivery',

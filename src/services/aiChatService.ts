@@ -120,6 +120,8 @@ export interface QChatMessage {
   dietaryFilters?: string[];
   /** Interactive support/order tracking UI rendered by the chat screen. */
   trackActions?: { label: string; orderId: string }[];
+  /** Pay-now shortcuts for orders whose payment is still outstanding. */
+  payActions?: { label: string; orderId: string; amount?: number }[];
   selectableOrders?: QChatSelectableOrder[];
   issueOptions?: string[];
   supportDraft?: {

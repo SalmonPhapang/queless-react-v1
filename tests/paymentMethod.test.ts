@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  checkoutPaymentMethodFromOrderLabel,
   getPaymentPollingPlan,
   needsApprovalPolling,
   toOrderPaymentMethod,
@@ -17,6 +18,15 @@ test('checkout methods map to the stored order and payment values', () => {
   assert.equal(toPaymentMethodCode('instantEft'), 'instantEft');
   assert.equal(toPaymentMethodCode('capitecPay'), 'capitecPay');
   assert.equal(toPaymentMethodCode('cashOnDelivery'), 'cashOnDelivery');
+});
+
+test('an unpaid order reuses the payment method chosen at checkout', () => {
+  assert.equal(checkoutPaymentMethodFromOrderLabel('Card'), 'card');
+  assert.equal(checkoutPaymentMethodFromOrderLabel('Instant EFT'), 'instantEft');
+  assert.equal(checkoutPaymentMethodFromOrderLabel('EFT'), 'instantEft');
+  assert.equal(checkoutPaymentMethodFromOrderLabel('Capitec Pay'), 'capitecPay');
+  assert.equal(checkoutPaymentMethodFromOrderLabel('Cash on Delivery'), 'cashOnDelivery');
+  assert.equal(checkoutPaymentMethodFromOrderLabel(undefined), null);
 });
 
 test('only Capitec Pay needs approval polling', () => {

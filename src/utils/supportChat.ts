@@ -1,11 +1,19 @@
 import type { Order } from '../models/order';
 import {
+  canTrackOrder,
+  isAwaitingPaymentOrder,
+  isAwaitingPaymentStatus,
   orderStatusFromDatabaseValue,
   orderStatusMeta,
   orderStatusHelpers,
 } from '../models/statuses';
 
+export { canTrackOrder, isAwaitingPaymentOrder, isAwaitingPaymentStatus };
+
 export type SupportTopic = 'order_status' | 'delivery' | 'payment' | 'cancellation' | 'other';
+
+/** Paying is an action, not a ticket category — it never becomes a ticket type. */
+export type AskQIntent = SupportTopic | 'pay_order';
 
 export const ASSISTANT_NAME = 'Q';
 export const ASSISTANT_ROLE = 'Shopping + support assistant';
@@ -41,12 +49,18 @@ export const SUPPORT_ISSUE_OPTIONS: string[] = [
 
 export const SUPPORT_SUGGESTIONS: string[] = [
   '📦 Track my order',
+  '💳 Pay for my order',
   '🛵 Delivery help',
   '💳 Payment question',
   '🚫 Cancel an order',
   '🙋 Speak to a human',
   '📚 Delivery & payment FAQs',
 ];
+
+export const PAY_ORDER_SUGGESTION = '💳 Pay for my order';
+
+export const NO_UNPAID_ORDER_REPLY =
+  "You don't have an order waiting for payment right now. If you just placed one, give it a moment — or ask me to track an existing order.";
 
 export const SHOPPING_SUGGESTIONS: string[] = [
   '🍔 Best burgers near me',
@@ -168,12 +182,36 @@ export function detectSupportTopic(value: string): SupportTopic | null {
  * language wins so a refund/tracking question never falls through to catalog
  * search just because it mentions a meal or store.
  */
+/**
+ * "Pay for my order" is a distinct action from "track my order" and from a
+ * general payment question. It is checked before the ticket-topic classifier.
+ */
+export function detectPayOrderIntent(value: string): boolean {
+  const n = normalizeSupportText(value);
+  return [
+    'pay my order',
+    'pay for my order',
+    'pay for order',
+    'pay order',
+    'pay the order',
+    'pay outstanding',
+    'pay outstanding order',
+    'pay unpaid order',
+    'pay now',
+    'complete payment',
+    'complete my payment',
+    'finish payment',
+    'settle my order',
+    'settle payment',
+  ].some((phrase) => n.includes(phrase));
+}
+
 export function detectShoppingIntent(value: string): boolean {
   const n = normalizeSupportText(value);
   if (!n) return false;
 
   const supportOverride =
-    /\b(refund|track|order status|where is my order|cancel|charge|charged|paid twice|missing item|wrong item|damaged|spilled|not delivered|did not arrive|human|agent|ticket|support team|complaint)\b/;
+    /\b(refund|track|order status|where is my order|cancel|charge|charged|paid twice|pay my order|pay for my order|pay now|missing item|wrong item|damaged|spilled|not delivered|did not arrive|human|agent|ticket|support team|complaint)\b/;
   if (supportOverride.test(n)) return false;
 
   const shoppingTerms =
@@ -198,30 +236,6 @@ export function orderLabel(order: Pick<Order, 'orderNumber' | 'id' | 'storeName'
 
 export function statusLabel(order: Pick<Order, 'status'>): string {
   return orderStatusMeta[order.status]?.displayName || order.status;
-}
-
-type OrderPaymentState = {
-  status?: string | null;
-  paymentStatus?: string | null;
-};
-
-/** Accepts OrderStatus, raw database values and the lightweight chat order pick. */
-export function isAwaitingPaymentStatus(status?: string | null): boolean {
-  return orderStatusFromDatabaseValue(status ?? undefined) === 'awaiting_payment';
-}
-
-/**
- * An unpaid order has no live delivery to track yet. COD orders keep a pending
- * payment status but still become trackable after store acceptance, so only an
- * explicit awaiting_payment state blocks tracking.
- */
-export function isAwaitingPaymentOrder(order: OrderPaymentState): boolean {
-  return isAwaitingPaymentStatus(order.status) || isAwaitingPaymentStatus(order.paymentStatus);
-}
-
-export function canTrackOrder(order: OrderPaymentState): boolean {
-  const status = orderStatusFromDatabaseValue(order.status ?? undefined);
-  return !orderStatusHelpers.isTerminal(status) && !isAwaitingPaymentOrder(order);
 }
 
 export function isRecentOrder(order: Pick<Order, 'createdAt'>): boolean {
@@ -290,6 +304,11 @@ export function replyForTopic(topic: SupportTopic, order: Order): string {
     default:
       return `I can see ${orderLabel(order)}. A human teammate can help from here — I'll open a ticket with this chat and the order details.`;
   }
+}
+
+/** Unpaid orders from newest to oldest, capped for a short chat reply. */
+export function unpaidOrders(orders: Order[]): Order[] {
+  return orders.filter(isAwaitingPaymentOrder).slice(0, 6);
 }
 
 export interface TopicOrderView {

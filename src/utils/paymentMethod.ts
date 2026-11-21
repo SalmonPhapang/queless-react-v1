@@ -35,6 +35,24 @@ export function toPaymentMethodCode(method: CheckoutPaymentMethod): PaymentMetho
   return PAYMENT_CODES[method];
 }
 
+/**
+ * Reverse lookup for an existing order so Pay now reuses the method the
+ * customer already chose at checkout instead of asking again.
+ */
+export function checkoutPaymentMethodFromOrderLabel(
+  label?: string | null
+): CheckoutPaymentMethod | null {
+  const key = String(label ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const match = (Object.keys(ORDER_LABELS) as CheckoutPaymentMethod[]).find(
+    (method) => ORDER_LABELS[method].toLowerCase().replace(/[^a-z0-9]/g, '') === key
+  );
+  // Legacy 'EFT' orders are Instant EFT.
+  if (!match && (key === 'eft' || key === 'instantbanktransfer')) return 'instantEft';
+  return match ?? null;
+}
+
 /** Capitec Pay approvals are asynchronous, so they need status polling. */
 export function needsApprovalPolling(method: CheckoutPaymentMethod | undefined): boolean {
   return method === 'capitecPay';

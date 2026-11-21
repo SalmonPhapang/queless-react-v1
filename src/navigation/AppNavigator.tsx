@@ -18,6 +18,7 @@ import { CartScreen } from '../screens/Cart/CartScreen';
 import { CheckoutScreen } from '../screens/Cart/CheckoutScreen';
 import { PaystackPaymentScreen } from '../screens/Cart/PaystackPaymentScreen';
 import { OrderTrackingScreen } from '../screens/Orders/OrderTrackingScreen';
+import { PayOrderScreen } from '../screens/Orders/PayOrderScreen';
 import { AddressManagementScreen } from '../screens/Profile/AddressManagementScreen';
 import { NotificationInboxScreen } from '../screens/Profile/NotificationInboxScreen';
 import { EditProfileScreen } from '../screens/Profile/EditProfileScreen';
@@ -58,6 +59,7 @@ export type RootStackParamList = {
     amount?: number;
   };
   OrderTracking: { orderId: string; fromCheckout?: boolean };
+  PayOrder: { orderId: string };
   AddressManagement: undefined;
   NotificationInbox: undefined;
   EditProfile: undefined;
@@ -106,6 +108,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="Checkout" component={CheckoutScreen} />
       <Stack.Screen name="PaystackPayment" component={PaystackPaymentScreen} />
       <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
+      <Stack.Screen name="PayOrder" component={PayOrderScreen} />
       <Stack.Screen name="AddressManagement" component={AddressManagementScreen} />
       <Stack.Screen name="NotificationInbox" component={NotificationInboxScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />

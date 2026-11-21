@@ -9,16 +9,19 @@ import {
   buildTicketSubject,
   buildTopicOrderView,
   canTrackOrder,
+  detectPayOrderIntent,
   detectShoppingIntent,
   detectSupportTopic,
   GENERAL_SUGGESTIONS,
   isAwaitingPaymentOrder,
   isAwaitingPaymentStatus,
+  PAY_ORDER_SUGGESTION,
   paymentReply,
   replyForTopic,
   SHOPPING_UNAVAILABLE_REPLY,
   SUPPORT_UNAVAILABLE_REPLY,
   supportCategoryFromIssueLabel,
+  unpaidOrders,
 } from '../src/utils/supportChat';
 
 const makeOrder = (overrides: Partial<Order> = {}): Order =>
@@ -152,6 +155,27 @@ test('FAQ and order-issue routing stay separate', () => {
   assert.equal(detectSupportTopic('I was charged twice'), 'payment');
   assert.equal(detectSupportTopic('Please cancel order QLE-ABC123'), 'cancellation');
   assert.equal(detectSupportTopic('Find me a burger'), null);
+});
+
+test('paying an order is separate from tracking it', () => {
+  assert.equal(detectPayOrderIntent('Pay for my order'), true);
+  assert.equal(detectPayOrderIntent('pay my order QLE-123'), true);
+  assert.equal(detectPayOrderIntent('complete payment'), true);
+  assert.equal(detectPayOrderIntent('Track my order'), false);
+  assert.equal(detectPayOrderIntent('I have a payment question'), false);
+  assert.equal(detectShoppingIntent('Pay for my order'), false);
+  // Tickets still use the existing payment category, not a new DB enum.
+  assert.equal(detectSupportTopic('Pay for my order'), 'payment');
+  assert.match(PAY_ORDER_SUGGESTION, /Pay for my order/);
+
+  const unpaid = makeOrder({
+    status: 'awaiting_payment' as const,
+    paymentStatus: 'awaiting_payment' as PaymentStatus,
+  });
+  assert.deepEqual(
+    unpaidOrders([makeOrder(), unpaid]).map((order) => order.id),
+    [unpaid.id]
+  );
 });
 
 test('awaiting-payment orders cannot be tracked', () => {

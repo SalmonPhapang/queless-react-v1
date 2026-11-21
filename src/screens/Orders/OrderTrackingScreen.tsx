@@ -15,7 +15,11 @@ import { Header } from '../../components/Header';
 import { StatusBadge } from '../../components/StatusBadge';
 import { TrackingMap } from '../../components/TrackingMap';
 import { appConfig } from '../../config/appConfig';
-import { orderStatusHelpers, orderStatusMeta } from '../../models/core/statuses';
+import {
+  isAwaitingPaymentOrder,
+  orderStatusHelpers,
+  orderStatusMeta,
+} from '../../models/core/statuses';
 import { formatAddress } from '../../utils/address';
 import { Skeleton } from '../../components/Skeleton';
 
@@ -118,6 +122,10 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
   })();
 
   const statusMeta = order ? orderStatusMeta[order.status] : undefined;
+  const paymentOutstanding =
+    !!order &&
+    isAwaitingPaymentOrder(order) &&
+    !orderStatusHelpers.isTerminal(order.status);
 
   const handleCallDriver = () => {
     if (order?.driver?.phone) {
@@ -217,6 +225,29 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
         </View>
 
         <View style={styles.dividerLine} />
+
+        {paymentOutstanding && (
+          <View style={[styles.paymentBox, { backgroundColor: colors.cardBackground, borderColor: colors.secondary }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[typography.titleSmall, { color: colors.onSurface, fontWeight: '700' }]}>
+                Payment still outstanding
+              </Text>
+              <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 4 }]}>
+                Tracking starts once payment is confirmed.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.payBtn, { backgroundColor: colors.secondary }]}
+              onPress={() => navigation.navigate('PayOrder', { orderId: order.id })}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="card-outline" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={[typography.labelMedium, { color: '#FFFFFF', fontWeight: '800' }]}>
+                Pay now
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {order.driver?.name ? (
           <View style={[styles.driverBox, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}>
@@ -337,6 +368,23 @@ const styles = StyleSheet.create({
   detailsDrawer: { padding: 16, paddingBottom: 40 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dividerLine: { height: 1, backgroundColor: 'rgba(150,150,150,0.15)', marginVertical: 14 },
+  paymentBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+  },
+  payBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginLeft: 10,
+  },
   driverBox: {
     flexDirection: 'row',
     alignItems: 'center',

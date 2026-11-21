@@ -46,17 +46,21 @@ import {
   buildTicketSubject,
   buildTopicOrderView,
   canTrackOrder,
+  detectPayOrderIntent,
   detectShoppingIntent,
   detectSupportTopic,
   GENERAL_SUGGESTIONS,
   HUMAN_HANDOFF_REPLY,
+  NO_UNPAID_ORDER_REPLY,
   normalizeSupportText,
+  PAY_ORDER_SUGGESTION,
   orderLabel,
   replyForTopic,
   statusLabel,
   SUPPORT_ISSUE_OPTIONS,
   SUPPORT_TOPIC_LABELS,
   supportCategoryFromIssueLabel,
+  unpaidOrders,
   type SupportTopic,
 } from '../../utils/supportChat';
 
@@ -316,6 +320,74 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     }
   };
 
+  /** Distinct from tracking: only unpaid orders get a Pay now shortcut. */
+  const handlePayOrderIntent = async () => {
+    setLoading(true);
+    try {
+      const orders = await getCurrentUserOrders();
+      if (orders === null) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            sender: 'assistant',
+            text: 'Please sign in to see orders waiting for payment. You can sign in from the Profile tab.',
+            timestamp: new Date().toISOString(),
+            suggestions: ['📚 Delivery & payment FAQs', '🙋 Speak to a human'],
+          },
+        ]);
+        return;
+      }
+
+      const payable = unpaidOrders(orders);
+      if (payable.length === 0) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            sender: 'assistant',
+            text: NO_UNPAID_ORDER_REPLY,
+            timestamp: new Date().toISOString(),
+            suggestions: ['📦 Track my order', '💳 Payment question', '🙋 Speak to a human'],
+          },
+        ]);
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg_${Date.now()}`,
+          sender: 'assistant',
+          text: `These orders still need payment. Tap **Pay now** on the right one:\n${payable
+            .map((order) => `• ${orderLabel(order)} — ${appConfig.formatCurrency(order.total)}`)
+            .join('\n')}`,
+          timestamp: new Date().toISOString(),
+          payActions: payable.map((order) => ({
+            label: `Pay now · #${order.orderNumber || order.id.substring(0, 8).toUpperCase()}`,
+            orderId: order.id,
+            amount: order.total,
+          })),
+          suggestions: ['📦 Track my order', '💳 Payment question', '🙋 Speak to a human'],
+        },
+      ]);
+    } catch (e) {
+      console.warn('Pay-order flow error:', e);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg_${Date.now()}`,
+          sender: 'assistant',
+          text: "I couldn't load your unpaid orders right now. Check your Orders tab, or try again in a moment.",
+          timestamp: new Date().toISOString(),
+          suggestions: ['📦 Track my order', '🙋 Speak to a human'],
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleHumanHandoff = () => {
     setMessages((prev) => [
       ...prev,
@@ -403,10 +475,16 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
     const normalized = normalizeSupportText(text);
     const shoppingIntent = detectShoppingIntent(text);
-    const topic = shoppingIntent ? null : detectSupportTopic(text);
+    const payOrderIntent = !shoppingIntent && detectPayOrderIntent(text);
+    const topic = shoppingIntent || payOrderIntent ? null : detectSupportTopic(text);
 
     if (normalized === 'view my tickets' || normalized === 'my tickets' || normalized === 'tickets') {
       navigation.navigate('SupportTickets');
+      return;
+    }
+
+    if (payOrderIntent) {
+      await handlePayOrderIntent();
       return;
     }
 
@@ -753,6 +831,21 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                     onPress={() => navigation.navigate('OrderTracking', { orderId: action.orderId })}
                   >
                     <Ionicons name="location-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={[typography.titleSmall, { color: '#FFFFFF' }]}>{action.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {item.payActions && item.payActions.length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                {item.payActions.map((action) => (
+                  <TouchableOpacity
+                    key={action.orderId + action.label}
+                    style={[styles.actionBtn, { backgroundColor: colors.secondary, marginTop: 6 }]}
+                    onPress={() => navigation.navigate('PayOrder', { orderId: action.orderId })}
+                  >
+                    <Ionicons name="card-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
                     <Text style={[typography.titleSmall, { color: '#FFFFFF' }]}>{action.label}</Text>
                   </TouchableOpacity>
                 ))}
