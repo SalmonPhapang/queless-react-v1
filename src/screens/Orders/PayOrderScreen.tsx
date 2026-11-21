@@ -15,7 +15,6 @@ import { Skeleton } from '../../components/Skeleton';
 import { appConfig } from '../../config/appConfig';
 import { orderService } from '../../services/orderService';
 import { paymentService } from '../../services/paymentService';
-import { cartService } from '../../services/cartService';
 import type { Order } from '../../models/order';
 import { isAwaitingPaymentOrder, orderStatusHelpers } from '../../models/statuses';
 import {
@@ -102,7 +101,6 @@ export const PayOrderScreen: React.FC<PayOrderScreenProps> = ({ navigation, rout
 
       if (payment.status === 'completed') {
         closePaymentWindow();
-        await cartService.clearCart();
         goToTracking();
         return;
       }
