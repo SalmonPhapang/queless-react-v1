@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleProp, View, ViewStyle } from 'react-native';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { useTheme } from '../theme/theme';
 
 interface SkeletonProps {
@@ -55,6 +56,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 
 export const StoreCardSkeleton: React.FC<{ horizontal?: boolean }> = ({ horizontal = false }) => {
   const { colors } = useTheme();
+  const layout = useResponsiveLayout();
   return (
     <View
       style={{
@@ -64,12 +66,19 @@ export const StoreCardSkeleton: React.FC<{ horizontal?: boolean }> = ({ horizont
         backgroundColor: colors.cardBackground,
         overflow: 'hidden',
         marginVertical: 6,
-        marginHorizontal: horizontal ? 0 : 16,
-        width: horizontal ? 260 : undefined,
+        marginHorizontal: layout.isWeb && !horizontal ? 6 : horizontal ? 0 : 16,
+        width: horizontal ? layout.horizontalStoreCardWidth ?? 260 : undefined,
+        maxWidth: !horizontal ? layout.cardMaxWidth : undefined,
+        alignSelf: !horizontal && layout.isWeb ? ('center' as const) : undefined,
         marginRight: horizontal ? 12 : undefined,
       }}
     >
-      <Skeleton width="100%" height={140} borderRadius={0} />
+      <Skeleton
+        width="100%"
+        height={layout.isWeb ? undefined : 140}
+        borderRadius={0}
+        style={layout.isWeb ? { aspectRatio: 16 / 9 } : undefined}
+      />
       <View style={{ padding: 12 }}>
         <Skeleton width="70%" height={18} borderRadius={6} style={{ marginBottom: 8 }} />
         <Skeleton width="50%" height={14} borderRadius={6} style={{ marginBottom: 10 }} />
@@ -81,11 +90,14 @@ export const StoreCardSkeleton: React.FC<{ horizontal?: boolean }> = ({ horizont
 
 export const ProductCardSkeleton: React.FC = () => {
   const { colors } = useTheme();
+  const layout = useResponsiveLayout();
   return (
     <View
       style={{
         flex: 1,
         margin: 8,
+        maxWidth: layout.cardMaxWidth,
+        alignSelf: layout.isWeb ? ('center' as const) : undefined,
         borderRadius: 16,
         borderWidth: 1,
         borderColor: colors.divider,
@@ -93,7 +105,12 @@ export const ProductCardSkeleton: React.FC = () => {
         overflow: 'hidden',
       }}
     >
-      <Skeleton width="100%" height={140} borderRadius={0} />
+      <Skeleton
+        width="100%"
+        height={layout.isWeb ? undefined : 140}
+        borderRadius={0}
+        style={layout.isWeb ? { aspectRatio: 4 / 3 } : undefined}
+      />
       <View style={{ padding: 12 }}>
         <Skeleton width="80%" height={16} borderRadius={6} style={{ marginBottom: 8 }} />
         <Skeleton width="40%" height={14} borderRadius={6} style={{ marginBottom: 12 }} />

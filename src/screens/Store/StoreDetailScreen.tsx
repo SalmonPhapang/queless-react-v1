@@ -8,6 +8,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { storeService } from '../../services/storeService';
 import { Store } from '../../models/store';
@@ -24,6 +25,7 @@ import { Skeleton, ProductCardSkeleton } from '../../components/Skeleton';
 
 export const StoreDetailScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const storeId = route.params?.storeId;
 
   const [store, setStore] = useState<Store | null>(null);
@@ -96,8 +98,15 @@ export const StoreDetailScreen: React.FC<{ navigation: any; route: any }> = ({ n
   if (loading || !store) {
     return (
       <View style={[styles.container, { backgroundColor: colors.surface }]}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Skeleton width="100%" height={200} borderRadius={0} />
+        <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.scrollContent)}>
+          <View
+            style={[
+              styles.bannerContainer,
+              layout.isWeb && { maxWidth: layout.heroMaxWidth, alignSelf: 'center' as const },
+            ]}
+          >
+            <Skeleton width="100%" height={200} borderRadius={0} />
+          </View>
           <View style={{ marginHorizontal: 16, marginTop: -24, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.divider, backgroundColor: colors.cardBackground }}>
             <Skeleton width="70%" height={24} borderRadius={6} style={{ marginBottom: 10 }} />
             <Skeleton width="100%" height={14} borderRadius={6} style={{ marginBottom: 8 }} />
@@ -107,9 +116,14 @@ export const StoreDetailScreen: React.FC<{ navigation: any; route: any }> = ({ n
           <View style={{ marginHorizontal: 16, marginTop: 20, marginBottom: 8 }}>
             <Skeleton width={140} height={22} borderRadius={6} />
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10 }}>
+          <View
+            style={[
+              { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10 },
+              layout.isWeb && { justifyContent: 'center' },
+            ]}
+          >
             {[1, 2, 3, 4].map((i) => (
-              <View key={i} style={{ width: '50%' }}>
+              <View key={i} style={{ width: `${100 / layout.columns}%` }}>
                 <ProductCardSkeleton />
               </View>
             ))}
@@ -124,14 +138,14 @@ export const StoreDetailScreen: React.FC<{ navigation: any; route: any }> = ({ n
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.scrollContent)}>
         {statusMessage && !storeClosed && (
           <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
             <StatusMessage variant="warning" message={statusMessage} onDismiss={() => setStatusMessage(null)} />
           </View>
         )}
         {/* Banner Image & Back Button */}
-        <View style={styles.bannerContainer}>
+        <View style={[styles.bannerContainer, layout.isWeb && { maxWidth: layout.heroMaxWidth, alignSelf: 'center' as const }]}>
           <SmartImage
             source={{ uri: store.imageUrl }}
             style={styles.bannerImage}
@@ -190,8 +204,10 @@ export const StoreDetailScreen: React.FC<{ navigation: any; route: any }> = ({ n
         {/* Products Grid */}
         <View style={{ paddingHorizontal: 10 }}>
           <FlatList
+            key={`cols-${layout.columns}`}
             data={products}
-            numColumns={2}
+            numColumns={layout.columns}
+            columnWrapperStyle={layout.isWeb ? { justifyContent: 'center' } : undefined}
             scrollEnabled={false}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (

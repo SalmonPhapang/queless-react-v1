@@ -5,6 +5,7 @@ import { HomeScreen } from '../screens/Main/HomeScreen';
 import { LiquorHomeScreen } from '../screens/Liquor/LiquorHomeScreen';
 import { OrdersScreen } from '../screens/Main/OrdersScreen';
 import { ProfileScreen } from '../screens/Main/ProfileScreen';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { useTheme } from '../theme/theme';
 
 export type MainTabParamList = {
@@ -19,6 +20,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 /** Food first, then Liquor, Orders and Profile. */
 export const MainTabNavigator = () => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
 
   return (
     <Tab.Navigator
@@ -32,6 +34,11 @@ export const MainTabNavigator = () => {
           height: 60,
           paddingBottom: 8,
           paddingTop: 6,
+          ...(layout.isWeb && {
+            width: '100%',
+            maxWidth: layout.contentMaxWidth ?? 1180,
+            alignSelf: 'center' as const,
+          }),
         },
         tabBarLabelStyle: typography.labelSmall,
         tabBarIcon: ({ focused, color, size }) => {

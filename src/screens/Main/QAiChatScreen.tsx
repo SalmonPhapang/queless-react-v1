@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import {
   aiChatService,
@@ -66,6 +67,7 @@ import {
 
 export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const insets = useSafeAreaInsets();
 
   const listRef = useRef<FlatList<QChatMessage>>(null);
@@ -749,6 +751,7 @@ export const QAiChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
           <View
             style={[
               styles.messageBubble,
+              layout.isWeb && { maxWidth: 720 },
               item.sender === 'user' ? styles.userBubble : styles.assistantBubble,
               item.sender === 'user'
                 ? { backgroundColor: colors.primary }

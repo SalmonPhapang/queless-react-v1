@@ -9,6 +9,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { storeService } from '../../services/storeService';
 import { Store } from '../../models/store';
@@ -41,6 +42,7 @@ const CATEGORIES = [
 
 export const BrowseScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>(route.params?.search || '');
@@ -157,16 +159,19 @@ export const BrowseScreen: React.FC<{ navigation: any; route: any }> = ({ naviga
 
       {/* Stores List */}
       {loading ? (
-        <ScrollView contentContainerStyle={styles.listContent}>
+        <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.listContent)}>
           {[1, 2, 3].map((i) => (
             <StoreCardSkeleton key={i} />
           ))}
         </ScrollView>
       ) : (
         <FlatList
+          key={`cols-${layout.columns}`}
           data={stores}
+          numColumns={layout.isWeb ? layout.columns : 1}
+          columnWrapperStyle={layout.isWeb ? { justifyContent: 'center' } : undefined}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={responsiveContentStyle(layout, styles.listContent)}
           renderItem={({ item }) => (
             <StoreCard
               store={item}

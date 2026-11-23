@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { storeService } from '../../services/storeService';
 import { Product } from '../../models/product';
@@ -14,6 +15,7 @@ import { ProductCardSkeleton } from '../../components/Skeleton';
 
 export const StoreProductsScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const storeId = route.params?.storeId;
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -88,10 +90,15 @@ export const StoreProductsScreen: React.FC<{ navigation: any; route: any }> = ({
       </View>
 
       {loading ? (
-        <ScrollView contentContainerStyle={styles.gridContent}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -8 }}>
+        <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.gridContent)}>
+          <View
+            style={[
+              { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -8 },
+              layout.isWeb && { justifyContent: 'center' },
+            ]}
+          >
             {[1, 2, 3, 4].map((i) => (
-              <View key={i} style={{ width: '50%' }}>
+              <View key={i} style={{ width: `${100 / layout.columns}%` }}>
                 <ProductCardSkeleton />
               </View>
             ))}
@@ -99,10 +106,12 @@ export const StoreProductsScreen: React.FC<{ navigation: any; route: any }> = ({
         </ScrollView>
       ) : (
         <FlatList
+          key={`cols-${layout.columns}`}
           data={products}
-          numColumns={2}
+          numColumns={layout.columns}
+          columnWrapperStyle={layout.isWeb ? { justifyContent: 'center' } : undefined}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.gridContent}
+          contentContainerStyle={responsiveContentStyle(layout, styles.gridContent)}
           renderItem={({ item }) => (
             <ProductCard
               product={item}

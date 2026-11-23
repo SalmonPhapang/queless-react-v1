@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { Header } from '../../components/Header';
 import { SmartImage } from '../../components/SmartImage';
@@ -29,6 +30,7 @@ interface BudgetBasketScreenProps {
  *  buried below the plan list on the same screen. */
 export const BudgetBasketScreen: React.FC<BudgetBasketScreenProps> = ({ navigation, route }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const basket = route.params?.basket;
   const [adding, setAdding] = useState(false);
 
@@ -72,7 +74,7 @@ export const BudgetBasketScreen: React.FC<BudgetBasketScreenProps> = ({ navigati
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
       <Header title="Your budget basket" showBack onBackPress={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.content)}>
         <View style={[styles.summaryCard, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}>
           <Text style={[typography.headlineSmall, { color: colors.onSurface }]}>
             {basket.storeName || 'Basket'}

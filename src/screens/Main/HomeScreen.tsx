@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { supabase } from '../../config/supabaseClient';
 import { appConfig } from '../../config/appConfig';
@@ -54,6 +55,7 @@ const DEFAULT_CUISINES = ['All', 'Fast Food', 'Pizza', 'Burgers', 'Asian', 'Dess
 export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
 
   const [activeTab, setActiveTab] = useState<'stores' | 'items' | 'again'>('stores');
   const [searchQuery, setSearchQuery] = useState('');
@@ -494,7 +496,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       )}
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={responsiveContentStyle(layout, styles.scrollContent)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.secondary]} />}
       >
         {/* Search Bar */}
@@ -591,9 +593,14 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <View style={{ paddingHorizontal: 8, marginTop: 8, marginBottom: 4 }}>
                   <Skeleton width={140} height={22} borderRadius={6} />
                 </View>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                <View
+                  style={[
+                    { flexDirection: 'row', flexWrap: 'wrap' },
+                    layout.isWeb && { justifyContent: 'center' },
+                  ]}
+                >
                   {[1, 2, 3, 4].map((i) => (
-                    <View key={i} style={{ width: '50%' }}>
+                    <View key={i} style={{ width: `${100 / layout.columns}%` }}>
                       <ProductCardSkeleton />
                     </View>
                   ))}
@@ -669,13 +676,30 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 )}
 
                 <SectionHeader title="Nearby Restaurants" onActionPress={() => navigation.navigate('Browse')} />
-                {visibleStores.map((store) => (
-                  <StoreCard
-                    key={store.id}
-                    store={store}
-                    onPress={(s) => navigation.navigate('StoreDetail', { storeId: s.id })}
+                {layout.isWeb ? (
+                  <FlatList
+                    key={`cols-${layout.columns}`}
+                    data={visibleStores}
+                    numColumns={layout.columns}
+                    columnWrapperStyle={{ justifyContent: 'center' }}
+                    scrollEnabled={false}
+                    keyExtractor={(store) => store.id}
+                    renderItem={({ item }) => (
+                      <StoreCard
+                        store={item}
+                        onPress={(s) => navigation.navigate('StoreDetail', { storeId: s.id })}
+                      />
+                    )}
                   />
-                ))}
+                ) : (
+                  visibleStores.map((store) => (
+                    <StoreCard
+                      key={store.id}
+                      store={store}
+                      onPress={(s) => navigation.navigate('StoreDetail', { storeId: s.id })}
+                    />
+                  ))
+                )}
                 {visibleStores.length === 0 && (
                   <Text style={[typography.bodyMedium, { color: colors.subtext, textAlign: 'center', marginVertical: 20 }]}>
                     No restaurants match {selectedCuisine}.
@@ -689,8 +713,10 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <SectionHeader title="Picked for You" />
                 {recommendedItems.length > 0 ? (
                   <FlatList
+                    key={`cols-${layout.columns}`}
                     data={recommendedItems}
-                    numColumns={2}
+                    numColumns={layout.columns}
+                    columnWrapperStyle={layout.isWeb ? { justifyContent: 'center' } : undefined}
                     scrollEnabled={false}
                     keyExtractor={(item) => item.product.id}
                     renderItem={({ item }) => (

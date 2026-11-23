@@ -15,6 +15,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
   fallbackIcon = 'restaurant-outline',
   fallbackIconSize = 40,
   aspectRatio,
+  resizeMode,
   ...props
 }) => {
   const { colors } = useTheme();
@@ -77,7 +78,8 @@ export const SmartImage: React.FC<SmartImageProps> = ({
     <View style={containerStyle}>
       <Image
         source={source}
-        style={[StyleSheet.absoluteFill, style]}
+        resizeMode={resizeMode}
+        style={StyleSheet.absoluteFill}
         onLoadStart={() => setLoading(true)}
         onLoadEnd={() => setLoading(false)}
         onError={() => {

@@ -5,12 +5,14 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TextInput,
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { Store } from '../../models/store';
 import { storeService } from '../../services/storeService';
@@ -32,6 +34,7 @@ interface LiquorHomeScreenProps {
 export const LiquorHomeScreen: React.FC<LiquorHomeScreenProps> = ({ navigation }) => {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
 
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -216,7 +219,7 @@ export const LiquorHomeScreen: React.FC<LiquorHomeScreenProps> = ({ navigation }
       </View>
 
       {loading ? (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.scrollContent)}>
           <Skeleton width={180} height={28} borderRadius={8} style={{ marginHorizontal: 16, marginBottom: 8 }} />
           <Skeleton width={240} height={16} borderRadius={6} style={{ marginHorizontal: 16 }} />
           <Skeleton width="auto" height={48} borderRadius={12} style={{ marginTop: 20, marginHorizontal: 16 }} />
@@ -238,7 +241,7 @@ export const LiquorHomeScreen: React.FC<LiquorHomeScreenProps> = ({ navigation }
         </ScrollView>
       ) : (
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={responsiveContentStyle(layout, styles.scrollContent)}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.secondary]} />
           }
@@ -363,6 +366,21 @@ export const LiquorHomeScreen: React.FC<LiquorHomeScreenProps> = ({ navigation }
                 </>
               )}
             </View>
+          ) : layout.isWeb ? (
+            <FlatList
+              key={`cols-${layout.columns}`}
+              data={filteredStores}
+              numColumns={layout.columns}
+              columnWrapperStyle={layout.isWeb ? { justifyContent: 'center' } : undefined}
+              scrollEnabled={false}
+              keyExtractor={(store) => store.id}
+              renderItem={({ item }) => (
+                <StoreCard
+                  store={item}
+                  onPress={(selected) => navigation.navigate('StoreDetail', { storeId: selected.id })}
+                />
+              )}
+            />
           ) : (
             filteredStores.map((store) => (
               <StoreCard

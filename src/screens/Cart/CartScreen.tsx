@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { cartService } from '../../services/cartService';
 import { promoCodeService } from '../../services/promoCodeService';
@@ -22,6 +23,7 @@ import { appConfig } from '../../config/appConfig';
 
 export const CartScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const [cart, setCart] = useState<Cart | null>(cartService.getCartSync());
   const [promoInput, setPromoInput] = useState('');
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
@@ -127,7 +129,7 @@ export const CartScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         }
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.scrollContent)}>
         {promoMessage && (
           <StatusMessage
             variant="info"

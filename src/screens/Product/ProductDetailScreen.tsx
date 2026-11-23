@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { Product } from '../../models/product';
 import { Store } from '../../models/store';
@@ -29,6 +30,7 @@ interface ProductDetailScreenProps {
 
 export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ navigation, route }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const product: Product = route.params?.product;
   const passedStore: Store | undefined = route.params?.store;
   const storeId: string | undefined =
@@ -156,13 +158,13 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.scrollContent)} showsVerticalScrollIndicator={false}>
         {statusMessage && (
           <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
             <StatusMessage variant="warning" message={statusMessage} onDismiss={() => setStatusMessage(null)} />
           </View>
         )}
-        <View style={styles.imageSection}>
+        <View style={[styles.imageSection, layout.isWeb && { maxWidth: layout.heroMaxWidth, alignSelf: 'center' as const }]}>
           <SmartImage
             source={{ uri: product.imageUrl }}
             style={styles.heroImage}
@@ -187,7 +189,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.infoSection, { backgroundColor: colors.surface }]}>
+        <View style={[styles.infoSection, layout.isWeb && { maxWidth: layout.heroMaxWidth, alignSelf: 'center' as const }, { backgroundColor: colors.surface }]}>
           {product.isLocalBrand && (
             <View style={[styles.localBadge, { backgroundColor: 'rgba(6, 193, 103, 0.12)' }]}>
               <Ionicons name="flag" size={14} color={colors.secondary} />
@@ -249,7 +251,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
         </View>
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.divider }]}>
+      <View style={[styles.footer, layout.isWeb && { maxWidth: layout.heroMaxWidth, alignSelf: 'center' as const }, { backgroundColor: colors.surface, borderTopColor: colors.divider }]}>
         {canOrder ? (
           <View style={styles.footerRow}>
             <View style={[styles.quantityBox, { backgroundColor: colors.cardBackground }]}>

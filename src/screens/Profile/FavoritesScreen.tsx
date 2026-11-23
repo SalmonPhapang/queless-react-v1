@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { Header } from '../../components/Header';
 import { ProductCard } from '../../components/ProductCard';
@@ -19,6 +20,7 @@ import { ProductCardSkeleton } from '../../components/Skeleton';
 
 export const FavoritesScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,10 +50,15 @@ export const FavoritesScreen: React.FC<{ navigation: any }> = ({ navigation }) =
       <Header title="Favourites" showBack onBackPress={() => navigation.goBack()} />
 
       {loading ? (
-        <ScrollView contentContainerStyle={styles.listContent}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+        <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.listContent)}>
+          <View
+            style={[
+              { flexDirection: 'row', flexWrap: 'wrap' },
+              layout.isWeb && { justifyContent: 'center' },
+            ]}
+          >
             {[1, 2, 3, 4].map((i) => (
-              <View key={i} style={{ width: '50%' }}>
+              <View key={i} style={{ width: `${100 / layout.columns}%` }}>
                 <ProductCardSkeleton />
               </View>
             ))}
@@ -59,10 +66,12 @@ export const FavoritesScreen: React.FC<{ navigation: any }> = ({ navigation }) =
         </ScrollView>
       ) : (
         <FlatList
+          key={`cols-${layout.columns}`}
           data={products}
-          numColumns={2}
+          numColumns={layout.columns}
+          columnWrapperStyle={layout.isWeb ? { justifyContent: 'center' } : undefined}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={responsiveContentStyle(layout, styles.listContent)}
           renderItem={({ item }) => (
             <ProductCard
               product={item}

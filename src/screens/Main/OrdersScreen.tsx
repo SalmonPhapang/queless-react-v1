@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { orderService } from '../../services/orderService';
 import { authService } from '../../services/authService';
@@ -21,6 +22,7 @@ import { OrderCardSkeleton } from '../../components/Skeleton';
 
 export const OrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +57,7 @@ export const OrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       <Header title="Your Orders" subtitle="Track live deliveries & history" />
 
       {loading ? (
-        <ScrollView contentContainerStyle={styles.listContent}>
+        <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.listContent)}>
           {[1, 2, 3].map((i) => (
             <OrderCardSkeleton key={i} />
           ))}
@@ -64,7 +66,7 @@ export const OrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         <FlatList
           data={orders}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={responsiveContentStyle(layout, styles.listContent)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.secondary]} />}
           renderItem={({ item }) => {
             const canonicalStatus = orderStatusFromDatabaseValue(item.status);

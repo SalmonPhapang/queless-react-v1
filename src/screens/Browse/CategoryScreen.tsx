@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
 import { productService } from '../../services/productService';
 import { storeService } from '../../services/storeService';
@@ -28,6 +29,7 @@ interface CategoryScreenProps {
 
 export const CategoryScreen: React.FC<CategoryScreenProps> = ({ navigation, route }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const category: string = route.params?.category ?? '';
   const productType: 'alcohol' | 'food' = route.params?.productType ?? 'alcohol';
 
@@ -140,11 +142,16 @@ export const CategoryScreen: React.FC<CategoryScreenProps> = ({ navigation, rout
       )}
 
       {loading ? (
-        <ScrollView contentContainerStyle={styles.gridContent}>
+        <ScrollView contentContainerStyle={responsiveContentStyle(layout, styles.gridContent)}>
           <Skeleton width="70%" height={56} borderRadius={12} style={{ marginBottom: 16 }} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -8 }}>
+          <View
+            style={[
+              { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -8 },
+              layout.isWeb && { justifyContent: 'center' },
+            ]}
+          >
             {[1, 2, 3, 4].map((i) => (
-              <View key={i} style={{ width: '50%' }}>
+              <View key={i} style={{ width: `${100 / layout.columns}%` }}>
                 <ProductCardSkeleton />
               </View>
             ))}
@@ -161,11 +168,12 @@ export const CategoryScreen: React.FC<CategoryScreenProps> = ({ navigation, rout
         </View>
       ) : (
         <FlatList
+          key={`cols-${layout.columns}`}
           data={products}
-          numColumns={2}
+          numColumns={layout.columns}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.gridContent}
-          columnWrapperStyle={styles.gridRow}
+          contentContainerStyle={responsiveContentStyle(layout, styles.gridContent)}
+          columnWrapperStyle={[styles.gridRow, layout.isWeb && { justifyContent: 'center' }]}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[
@@ -175,10 +183,11 @@ export const CategoryScreen: React.FC<CategoryScreenProps> = ({ navigation, rout
               onPress={() => openProduct(item)}
               activeOpacity={0.85}
             >
-              <View style={styles.imageWrapper}>
+              <View style={[styles.imageWrapper, layout.isWeb && { height: undefined, aspectRatio: 4 / 3 }]}>
                 <SmartImage
                   source={{ uri: item.imageUrl }}
                   style={styles.image}
+                  resizeMode={layout.isWeb ? 'contain' : undefined}
                   fallbackIcon="restaurant-outline"
                 />
                 {item.stock <= 0 && (

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Store } from '../models/store';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { useTheme } from '../theme/theme';
 import { SmartImage } from './SmartImage';
 import { appConfig } from '../config/appConfig';
@@ -16,21 +17,31 @@ interface StoreCardProps {
 
 export const StoreCard: React.FC<StoreCardProps> = ({ store, onPress, horizontal = false, badge }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
+
+  const webCardStyle = layout.isWeb
+    ? horizontal
+      ? { width: layout.horizontalStoreCardWidth }
+      : { marginHorizontal: 6, maxWidth: layout.cardMaxWidth, alignSelf: 'center' as const, flex: 1 }
+    : undefined;
+  const webImageStyle = layout.isWeb ? { height: undefined, aspectRatio: 16 / 9 } : undefined;
 
   return (
     <TouchableOpacity
       style={[
         styles.card,
         horizontal ? styles.horizontalCard : styles.fullCard,
+        webCardStyle,
         { backgroundColor: colors.cardBackground, borderColor: colors.divider },
       ]}
       onPress={() => onPress(store)}
       activeOpacity={0.85}
     >
-      <View style={styles.imageContainer}>
+      <View style={[styles.imageContainer, webImageStyle]}>
         <SmartImage
           source={{ uri: store.imageUrl }}
           style={styles.image}
+          resizeMode={layout.isWeb ? 'contain' : undefined}
           fallbackIcon="storefront-outline"
           fallbackIconSize={48}
         />

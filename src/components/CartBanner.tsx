@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { cartService } from '../services/cartService';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { Cart } from '../models/cart';
 import { useTheme } from '../theme/theme';
 import { appConfig } from '../config/appConfig';
@@ -12,6 +13,7 @@ interface CartBannerProps {
 
 export const CartBanner: React.FC<CartBannerProps> = ({ onPressCart }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
   const [cart, setCart] = useState<Cart | null>(cartService.getCartSync());
 
   useEffect(() => {
@@ -27,7 +29,18 @@ export const CartBanner: React.FC<CartBannerProps> = ({ onPressCart }) => {
   const subtotal = cartService.calculateSubtotal();
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        layout.isWeb && {
+          left: '50%',
+          right: undefined,
+          width: '100%',
+          maxWidth: layout.contentMaxWidth ?? 760,
+          transform: [{ translateX: '-50%' }],
+        },
+      ]}
+    >
       <TouchableOpacity
         style={[styles.banner, { backgroundColor: colors.secondary }]}
         onPress={onPressCart}

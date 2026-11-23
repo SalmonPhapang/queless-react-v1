@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Product } from '../models/product';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { useTheme } from '../theme/theme';
 import { SmartImage } from './SmartImage';
 import { appConfig } from '../config/appConfig';
@@ -23,12 +24,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   badge,
 }) => {
   const { colors, typography } = useTheme();
+  const layout = useResponsiveLayout();
+
+  const webCardStyle = layout.isWeb
+    ? horizontal
+      ? { width: layout.horizontalProductCardWidth }
+      : { maxWidth: layout.cardMaxWidth, alignSelf: 'center' as const }
+    : undefined;
+  const webImageStyle = layout.isWeb ? { height: undefined, aspectRatio: 4 / 3 } : undefined;
 
   return (
     <TouchableOpacity
       style={[
         styles.card,
         horizontal ? styles.horizontalCard : styles.gridCard,
+        webCardStyle,
         { backgroundColor: colors.cardBackground, borderColor: colors.divider },
       ]}
       onPress={() => onPress(product)}
@@ -37,7 +47,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <View style={styles.imageContainer}>
         <SmartImage
           source={{ uri: product.imageUrl }}
-          style={styles.image}
+          style={[styles.image, webImageStyle]}
+          resizeMode={layout.isWeb ? 'contain' : undefined}
           fallbackIcon="fast-food-outline"
           fallbackIconSize={36}
         />
