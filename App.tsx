@@ -3,12 +3,18 @@ import { Linking } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import { NAVIGATION_FONTS, useAppFonts } from './src/theme/fonts';
 import { ThemeProvider, useTheme } from './src/theme/theme';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { flushPendingAuthDeepLink, handleAuthDeepLink } from './src/utils/deepLinks';
 import { flushPendingNotificationTap, handleCurrentNotificationUrl } from './src/utils/notificationLinks';
+
+// Keep the branded splash visible until the custom font is ready, so text never
+// flashes in the platform default font before Plus Jakarta Sans loads.
+SplashScreen.preventAutoHideAsync();
 
 const Root: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -30,7 +36,7 @@ const Root: React.FC = () => {
 
   const navigationTheme = {
     ...(isDark ? DarkTheme : DefaultTheme),
-    fonts: (isDark ? DarkTheme : DefaultTheme).fonts,
+    fonts: NAVIGATION_FONTS,
     colors: {
       ...(isDark ? DarkTheme : DefaultTheme).colors,
       primary: colors.secondary,
@@ -58,6 +64,16 @@ const Root: React.FC = () => {
 };
 
 export default function App() {
+  const [fontsLoaded, fontsError] = useAppFonts();
+
+  useEffect(() => {
+    if (fontsLoaded || fontsError) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontsError]);
+
+  if (!fontsLoaded && !fontsError) return null;
+
   return (
     <SafeAreaProvider>
       <ThemeProvider>

@@ -39,7 +39,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
             onPress={() => navigation.navigate('Register')}
             activeOpacity={0.85}
           >
-            <Text style={[typography.titleMedium, { color: colors.surface, fontWeight: '900' }]}>
+            <Text style={[typography.titleMedium, { color: colors.surface, fontWeight: '800' }]}>
               Create Account
             </Text>
           </TouchableOpacity>
@@ -49,14 +49,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
             onPress={() => navigation.navigate('Login')}
             activeOpacity={0.85}
           >
-            <Text style={[typography.titleMedium, { color: colors.onSurface, fontWeight: '900' }]}>
+            <Text style={[typography.titleMedium, { color: colors.onSurface, fontWeight: '800' }]}>
               Sign In
             </Text>
           </TouchableOpacity>
 
           <View style={[styles.agePill, { backgroundColor: colors.errorContainer }]}>
             <Text style={[typography.labelMedium, { color: colors.error, fontWeight: '800' }]}>
-              18+ Only • Drink Responsibly
+              18+ Only â€¢ Drink Responsibly
             </Text>
           </View>
         </View>
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   },
   brand: {
     marginTop: 40,
-    fontWeight: '900',
+    fontWeight: '800',
     letterSpacing: -1,
   },
   tagline: {

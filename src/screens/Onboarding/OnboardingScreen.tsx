@@ -140,7 +140,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }
           onPress={handleNext}
           activeOpacity={0.85}
         >
-          <Text style={[typography.titleMedium, { color: colors.surface, fontWeight: '900' }]}>
+          <Text style={[typography.titleMedium, { color: colors.surface, fontWeight: '800' }]}>
             {isLastPage ? 'Get Started' : 'Next'}
           </Text>
         </TouchableOpacity>
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 48,
     textAlign: 'center',
-    fontWeight: '900',
+    fontWeight: '800',
   },
   description: {
     marginTop: 20,

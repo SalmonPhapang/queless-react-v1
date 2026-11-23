@@ -200,7 +200,7 @@ export const ProductOptionsScreen: React.FC<ProductOptionsScreenProps> = ({ navi
             fallbackIcon="fast-food-outline"
           />
           <View style={styles.productHeaderText}>
-            <Text style={[typography.titleLarge, { color: colors.onSurface, fontWeight: '900' }]}>
+            <Text style={[typography.titleLarge, { color: colors.onSurface, fontWeight: '800' }]}>
               {product.name}
             </Text>
             <Text
@@ -235,7 +235,7 @@ export const ProductOptionsScreen: React.FC<ProductOptionsScreenProps> = ({ navi
                     <Text
                       style={[
                         typography.labelSmall,
-                        { color: showError ? colors.error : colors.secondary, fontWeight: '900' },
+                        { color: showError ? colors.error : colors.secondary, fontWeight: '800' },
                       ]}
                     >
                       REQUIRED
@@ -340,7 +340,7 @@ export const ProductOptionsScreen: React.FC<ProductOptionsScreenProps> = ({ navi
             >
               <Ionicons name="remove" size={18} color={colors.onSurface} />
             </TouchableOpacity>
-            <Text style={[typography.titleMedium, { color: colors.onSurface, fontWeight: '900' }]}>
+            <Text style={[typography.titleMedium, { color: colors.onSurface, fontWeight: '800' }]}>
               {quantity}
             </Text>
             <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity((q) => q + 1)}>
@@ -360,8 +360,8 @@ export const ProductOptionsScreen: React.FC<ProductOptionsScreenProps> = ({ navi
             {isAdding ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={[typography.titleMedium, { color: '#FFFFFF', fontWeight: '900' }]}>
-                Add to Cart · {appConfig.formatCurrency(total)}
+              <Text style={[typography.titleMedium, { color: '#FFFFFF', fontWeight: '800' }]}>
+                Add to Cart Â· {appConfig.formatCurrency(total)}
               </Text>
             )}
           </TouchableOpacity>

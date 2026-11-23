@@ -208,7 +208,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
           )}
 
           <View style={styles.priceRow}>
-            <Text style={[typography.headlineLarge, { color: colors.secondary, fontWeight: '900' }]}>
+            <Text style={[typography.headlineLarge, { color: colors.secondary, fontWeight: '800' }]}>
               {appConfig.formatCurrency(product.price)}
             </Text>
             {!!product.volume && (
@@ -260,7 +260,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
               >
                 <Ionicons name="remove" size={18} color={colors.onSurface} />
               </TouchableOpacity>
-              <Text style={[typography.titleMedium, { color: colors.onSurface, fontWeight: '900' }]}>
+              <Text style={[typography.titleMedium, { color: colors.onSurface, fontWeight: '800' }]}>
                 {quantity}
               </Text>
               <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity((q) => q + 1)}>
@@ -277,8 +277,8 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
               {isAdding ? (
                 <ActivityIndicator color={colors.surface} />
               ) : (
-                <Text style={[typography.titleMedium, { color: colors.surface, fontWeight: '900' }]}>
-                  Add • {appConfig.formatCurrency(product.price * quantity)}
+                <Text style={[typography.titleMedium, { color: colors.surface, fontWeight: '800' }]}>
+                  Add â€¢ {appConfig.formatCurrency(product.price * quantity)}
                 </Text>
               )}
             </TouchableOpacity>
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   name: {
-    fontWeight: '900',
+    fontWeight: '800',
   },
   priceRow: {
     flexDirection: 'row',

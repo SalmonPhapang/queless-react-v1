@@ -169,7 +169,7 @@ export const LiquorHomeScreen: React.FC<LiquorHomeScreenProps> = ({ navigation }
           <Text
             style={[
               typography.titleLarge,
-              { color: colors.onSurface, fontWeight: '900', textAlign: 'center', marginTop: 24 },
+              { color: colors.onSurface, fontWeight: '800', textAlign: 'center', marginTop: 24 },
             ]}
           >
             Age verification required
@@ -330,7 +330,7 @@ export const LiquorHomeScreen: React.FC<LiquorHomeScreenProps> = ({ navigation }
               <Text
                 style={[
                   typography.titleLarge,
-                  { color: colors.onSurface, fontWeight: '900', textAlign: 'center', marginTop: 24 },
+                  { color: colors.onSurface, fontWeight: '800', textAlign: 'center', marginTop: 24 },
                 ]}
               >
                 {searchQuery

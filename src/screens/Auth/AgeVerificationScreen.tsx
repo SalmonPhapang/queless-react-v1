@@ -32,7 +32,7 @@ export const AgeVerificationScreen: React.FC<{ navigation: any }> = ({ navigatio
 
       <View style={styles.card}>
         <View style={[styles.badgeCircle, { backgroundColor: '#7C3AED' }]}>
-          <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: '900' }}>18+</Text>
+          <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: '800' }}>18+</Text>
         </View>
 
         <Text style={[typography.headlineLarge, { color: colors.onSurface, marginTop: 20, textAlign: 'center' }]}>

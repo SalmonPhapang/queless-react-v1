@@ -1,64 +1,70 @@
 import { TextStyle } from 'react-native';
+import { APP_FONT_FAMILY } from './fonts';
+
+const text = (style: TextStyle): TextStyle => ({
+  fontFamily: APP_FONT_FAMILY,
+  ...style,
+});
 
 export const Typography: Record<string, TextStyle> = {
-  displayLarge: {
+  displayLarge: text({
     fontSize: 40,
     fontWeight: '700',
     lineHeight: 48,
-  },
-  headlineLarge: {
+  }),
+  headlineLarge: text({
     fontSize: 28,
     fontWeight: '700',
     lineHeight: 34,
-  },
-  headlineMedium: {
+  }),
+  headlineMedium: text({
     fontSize: 22,
     fontWeight: '700',
     lineHeight: 28,
-  },
-  titleLarge: {
+  }),
+  titleLarge: text({
     fontSize: 20,
     fontWeight: '600',
     lineHeight: 26,
-  },
-  titleMedium: {
+  }),
+  titleMedium: text({
     fontSize: 16,
     fontWeight: '600',
     lineHeight: 22,
-  },
-  titleSmall: {
+  }),
+  titleSmall: text({
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
-  },
-  bodyLarge: {
+  }),
+  bodyLarge: text({
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 22,
-  },
-  bodyMedium: {
+  }),
+  bodyMedium: text({
     fontSize: 14,
     fontWeight: '400',
     lineHeight: 20,
-  },
-  bodySmall: {
+  }),
+  bodySmall: text({
     fontSize: 12,
     fontWeight: '400',
     lineHeight: 16,
-  },
-  labelLarge: {
+  }),
+  labelLarge: text({
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
-  },
-  labelMedium: {
+  }),
+  labelMedium: text({
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 16,
-  },
-  labelSmall: {
+  }),
+  labelSmall: text({
     fontSize: 10,
     fontWeight: '600',
     lineHeight: 14,
-  },
+  }),
 };
