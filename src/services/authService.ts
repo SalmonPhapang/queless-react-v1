@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabaseClient';
 import { User, Address } from '../models/user';
 import { mapAddresses } from '../utils/address';
+import { notificationPermissionService } from './notificationPermissionService';
 
 export const authService = {
   async signUp(email: string, password: string, fullName: string, phone: string): Promise<User | null> {
@@ -70,6 +71,9 @@ export const authService = {
   },
 
   async signOut(): Promise<void> {
+    // Remove push delivery instruments while the session is still valid;
+    // RLS only allows a user to delete their own rows.
+    await notificationPermissionService.revoke();
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   },

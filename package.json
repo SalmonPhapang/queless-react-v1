@@ -7,7 +7,7 @@
     "ios": "node scripts/expo.js start --ios",
     "web": "node scripts/expo.js start --web",
     "web:radius-test": "node scripts/expo.js start --web --clear --test-radius 25",
-    "build:web": "node scripts/expo.js export --platform web --output-dir dist",
+    "build:web": "node scripts/expo.js export --platform web --output-dir dist && node scripts/copy-web-assets.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },

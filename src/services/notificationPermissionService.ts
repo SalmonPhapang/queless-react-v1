@@ -1,5 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { supabase } from '../config/supabaseClient';
+import { subscribeToWebPush, unsubscribeFromWebPush } from './webPushService';
 
 const ORDER_CHANNEL_ID = 'order-updates';
 
@@ -15,7 +17,9 @@ const isAuthorized = (status: Notifications.NotificationPermissionsStatus): bool
  */
 export const notificationPermissionService = {
   async hasPermission(): Promise<boolean> {
-    if (Platform.OS === 'web') return false;
+    if (Platform.OS === 'web') {
+      return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+    }
     try {
       return isAuthorized(await Notifications.getPermissionsAsync());
     } catch (error) {
@@ -25,7 +29,7 @@ export const notificationPermissionService = {
   },
 
   async requestPermission(): Promise<boolean> {
-    if (Platform.OS === 'web') return false;
+    if (Platform.OS === 'web') return subscribeToWebPush();
 
     try {
       if (Platform.OS === 'android') {
@@ -53,5 +57,25 @@ export const notificationPermissionService = {
       console.warn('Could not request notification permission:', error);
       return false;
     }
+  },
+
+  /**
+   * Called BEFORE signOut so RLS still sees the authenticated user and the
+   * delivery instruments are removed from the database as well as the device.
+   */
+  async revoke(): Promise<void> {
+    if (Platform.OS === 'web') {
+      await unsubscribeFromWebPush();
+      return;
+    }
+
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) return;
+    const { error } = await supabase
+      .from('user_fcm_tokens')
+      .delete()
+      .eq('user_id', data.user.id)
+      .eq('provider', 'expo');
+    if (error) console.warn('Could not remove Expo push token:', error.message);
   },
 };

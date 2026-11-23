@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Scr
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/theme';
 import { notificationInboxService } from '../../services/notificationInboxService';
+import { onPushReceived } from '../../services/pushEvents';
 import { authService } from '../../services/authService';
 import { UserNotification } from '../../models/userNotification';
 import { Header } from '../../components/Header';
@@ -32,6 +33,8 @@ export const NotificationInboxScreen: React.FC<{ navigation: any }> = ({ navigat
   useEffect(() => {
     fetchNotifs();
   }, []);
+
+  useEffect(() => onPushReceived(() => void fetchNotifs()), []);
 
   const onRefresh = async () => {
     setRefreshing(true);

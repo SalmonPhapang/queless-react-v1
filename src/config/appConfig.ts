@@ -22,6 +22,12 @@ const defaultOsmTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const defaultOsmAttribution =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
+// Browser push VAPID public key. This is safe to ship to clients; the matching
+// private key lives only in Supabase Edge Function secrets. Keep this in sync
+// with supabase/functions/_shared/webpush.ts in the backend repo.
+const DEFAULT_WEB_PUSH_PUBLIC_KEY =
+  'BKzWSW-uiaeClLGMck7ptVrWnIP07zMKUuoICw-G7KRppgH59StYPCfUfcpzosF5Lelhu1spJWT6scMpbl203nw';
+
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lxsvydiyzeavdqbjxkpp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4c3Z5ZGl5emVhdmRxYmp4a3BwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3Njg1MDQsImV4cCI6MjA4MzM0NDUwNH0.nThX1Mj5MlKbsCsmlW8RhukSXC57kcbB9za92LwwiDQ';
 
@@ -38,6 +44,14 @@ export const appConfig = {
     process.env.EXPO_PUBLIC_NOTIFICATIONS_ENABLED ?? process.env.ENABLE_NOTIFICATIONS,
     false
   ),
+  push: {
+    // Native tokens stay behind the existing notification flag. Browser push
+    // is separate so the PWA can subscribe without a custom native build.
+    webEnabled: readFlag(process.env.EXPO_PUBLIC_WEB_PUSH_ENABLED, true),
+    webPublicKey: process.env.EXPO_PUBLIC_WEB_PUSH_PUBLIC_KEY || DEFAULT_WEB_PUSH_PUBLIC_KEY,
+    easProjectId:
+      process.env.EXPO_PUBLIC_EAS_PROJECT_ID || 'c7db493d-fb1e-46e9-92d1-270f51b14ea6',
+  },
   supabaseUrl: SUPABASE_URL,
   supabaseAnonKey: SUPABASE_ANON_KEY,
 

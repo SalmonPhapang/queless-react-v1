@@ -23,6 +23,7 @@ ios/
 
 # Signing credentials
 credentials.json
+.secrets/
 *.jks
 *.keystore
 *.p12

@@ -6,12 +6,17 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/theme/theme';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { flushPendingAuthDeepLink, handleAuthDeepLink } from './src/utils/deepLinks';
+import { flushPendingNotificationTap, handleCurrentNotificationUrl } from './src/utils/notificationLinks';
 
 const Root: React.FC = () => {
   const { colors, isDark } = useTheme();
+  usePushNotifications();
 
   useEffect(() => {
+    handleCurrentNotificationUrl();
+
     Linking.getInitialURL()
       .then((url) => handleAuthDeepLink(url ?? null))
       .catch((e) => console.warn('Initial deep link failed', e));
@@ -41,7 +46,10 @@ const Root: React.FC = () => {
     <NavigationContainer
       ref={navigationRef}
       theme={navigationTheme}
-      onReady={() => void flushPendingAuthDeepLink()}
+      onReady={() => {
+        void flushPendingAuthDeepLink();
+        flushPendingNotificationTap();
+      }}
     >
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppNavigator />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/theme';
@@ -16,7 +16,10 @@ import { appConfig } from '../../config/appConfig';
 export const LocationPermissionScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
   const [busy, setBusy] = useState(false);
-  const notificationsEnabled = appConfig.enableNotifications;
+  // Native push stays behind its feature flag. Browser push is available on
+  // web independently so the PWA can subscribe after the same prompt.
+  const notificationsEnabled =
+    appConfig.enableNotifications || (Platform.OS === 'web' && appConfig.push.webEnabled);
 
   const continueToApp = async () => {
     await AsyncStorage.setItem('location_prompt_seen', 'true');
