@@ -54,20 +54,12 @@ export interface Product {
   optionGroups: ProductOptionGroup[];
 }
 
-/** Platform margin applied on top of the vendor's base price. */
-export const PRODUCT_FEE_RATE = 0.125;
-
 /**
- * Customer-facing price for a vendor base price.
- *
- * Mirrors the Flutter app and the server's budget planner:
- *   floor(base * (1 + feeRate)) + 0.99
- *
- * The database `products.price` column is the vendor base price. Never treat it
- * as the customer price or the platform margin is silently deducted from the
- * store instead of added to the order.
+ * Platform margin and customer price formula.
+ * Source of truth: @queless/core (`floor(base * 1.125) + 0.99`).
  */
-export const customerPriceFromBasePrice = (basePrice: number): number => {
-  const safeBase = Number.isFinite(basePrice) ? Math.max(basePrice, 0) : 0;
-  return Math.floor(safeBase * (1 + PRODUCT_FEE_RATE)) + 0.99;
-};
+import { customerPriceFromBasePrice as coreCustomerPriceFromBasePrice } from '@queless/core/utils';
+import { PRODUCT_FEE_RATE as CORE_PRODUCT_FEE_RATE } from '@queless/core/utils';
+
+export const PRODUCT_FEE_RATE = CORE_PRODUCT_FEE_RATE;
+export const customerPriceFromBasePrice = coreCustomerPriceFromBasePrice;
