@@ -6,7 +6,7 @@ const text = (style: TextStyle): TextStyle => ({
   ...style,
 });
 
-export const Typography: Record<string, TextStyle> = {
+export const Typography = {
   displayLarge: text({
     fontSize: 40,
     fontWeight: '700',
@@ -21,6 +21,11 @@ export const Typography: Record<string, TextStyle> = {
     fontSize: 22,
     fontWeight: '700',
     lineHeight: 28,
+  }),
+  headlineSmall: text({
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 26,
   }),
   titleLarge: text({
     fontSize: 20,
@@ -68,3 +73,5 @@ export const Typography: Record<string, TextStyle> = {
     lineHeight: 14,
   }),
 };
+
+export type TypographyKey = keyof typeof Typography;

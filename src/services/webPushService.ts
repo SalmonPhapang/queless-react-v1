@@ -21,6 +21,8 @@ export type WebPushMessage =
   | { type: 'push-received' }
   | { type: 'notification-tap'; url?: string };
 
+const WEB_PUSH_ENDPOINT_KEY = 'queless_web_push_endpoint';
+
 const isBrowser = () => Platform.OS === 'web' && typeof window !== 'undefined';
 
 export function isWebPushSupported(): boolean {
@@ -73,12 +75,21 @@ async function saveSubscription(subscription: StoredSubscription): Promise<void>
       p256dh: subscription.keys.p256dh,
       auth: subscription.keys.auth,
       expiration_time: subscription.expirationTime ?? null,
+      app_id: appConfig.push.appId,
       user_agent: navigator.userAgent,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'endpoint' },
   );
-  if (saveError) console.warn('Could not save web push subscription:', saveError.message);
+  if (saveError) {
+    console.warn('Could not save web push subscription:', saveError.message);
+    return;
+  }
+  try {
+    window.localStorage.setItem(WEB_PUSH_ENDPOINT_KEY, subscription.endpoint);
+  } catch {
+    // Storage can be disabled; the browser subscription is still authoritative.
+  }
 }
 
 function toStored(subscription: PushSubscription): StoredSubscription | null {
@@ -138,24 +149,46 @@ export async function syncWebPushSubscription(): Promise<void> {
   }
 }
 
-/** Remove the browser subscription and every saved row for this user. */
-export async function unsubscribeFromWebPush(): Promise<void> {
+/** Remove this browser's subscription and only its saved row. */
+export async function unsubscribeFromWebPush(userId?: string): Promise<void> {
   if (!isBrowser() || !('serviceWorker' in navigator)) return;
+
+  const { data } = await supabase.auth.getUser();
+  const ownerId = userId || data.user?.id;
+  if (!ownerId) return;
+
+  let endpoint: string | null = null;
   try {
     const registration = await currentRegistration();
     const subscription = await registration?.pushManager.getSubscription();
+    endpoint = subscription?.endpoint ?? null;
     await subscription?.unsubscribe();
   } catch (error) {
     console.warn('Could not remove web push subscription:', error);
   }
 
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return;
+  if (!endpoint) {
+    try {
+      endpoint = window.localStorage.getItem(WEB_PUSH_ENDPOINT_KEY);
+    } catch {
+      // Fall through: without an endpoint we must not issue a broad delete.
+    }
+  }
+  if (!endpoint) return;
+
   const { error } = await supabase
     .from('web_push_subscriptions')
     .delete()
-    .eq('user_id', data.user.id);
-  if (error) console.warn('Could not delete web push subscription rows:', error.message);
+    .eq('user_id', ownerId)
+    .eq('endpoint', endpoint)
+    .eq('app_id', appConfig.push.appId);
+  if (error) console.warn('Could not delete web push subscription row:', error.message);
+
+  try {
+    window.localStorage.removeItem(WEB_PUSH_ENDPOINT_KEY);
+  } catch {
+    // Best effort only.
+  }
 }
 
 /** Messages posted by push-sw.js to the open app tab. */

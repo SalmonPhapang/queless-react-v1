@@ -45,6 +45,8 @@ export const appConfig = {
     false
   ),
   push: {
+    /** Audience written to `app_id` on both Expo and Web Push token rows. */
+    appId: 'customer',
     // Native tokens stay behind the existing notification flag. Browser push
     // is separate so the PWA can subscribe without a custom native build.
     webEnabled: readFlag(process.env.EXPO_PUBLIC_WEB_PUSH_ENABLED, true),
