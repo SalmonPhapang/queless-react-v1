@@ -7,8 +7,7 @@ import { PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sa
 import { useFonts } from 'expo-font';
 
 /** Single family used by every semantic text style and by React Navigation. */
-export { APP_FONT_FAMILY } from '@queless/core/theme';
-import { APP_FONT_FAMILY } from '@queless/core/theme';
+export const APP_FONT_FAMILY = 'Plus Jakarta Sans';
 
 /**
  * Plus Jakarta Sans ships as static cuts, so the supported weights are grouped
