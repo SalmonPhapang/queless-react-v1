@@ -362,6 +362,9 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   const { colors, typography } = useTheme();
   const { authorizationUrl, reference, orderId, paymentId, paymentMethod, amount } = route.params || {};
   const isCapitecPay = needsApprovalPolling(paymentMethod);
+  // Native Capitec checkout is Paystack-owned: no duplicate app header or hint,
+  // and no custom "request sent" screen over Paystack's own instructions.
+  const isNativeCapitecPay = isCapitecPay && Platform.OS !== 'web';
   const methodLabel = isCapitecPay
     ? 'Capitec Pay'
     : paymentMethod === 'instantEft'
@@ -461,6 +464,21 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
     });
   };
 
+  const settlePaid = async () => {
+    clearPollTimer();
+    pollCancelledRef.current = true;
+    await cartService.clearCart();
+
+    if (isNativeCapitecPay) {
+      // Capitec approval happens outside the WebView, so there is no callback
+      // to act on. Once verification confirms payment, go straight to tracking.
+      goToTracking();
+      return;
+    }
+
+    setPhase('success');
+  };
+
   const failVerification = (title: string, message: string) => {
     clearPollTimer();
     pollCancelledRef.current = true;
@@ -488,9 +506,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
     try {
       const result = await paymentService.verifyPaystackPayment(paymentId, reference);
       if (result.paid) {
-        clearPollTimer();
-        await cartService.clearCart();
-        setPhase('success');
+        await settlePaid();
         return;
       }
 
@@ -524,18 +540,23 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   };
   checkPaymentRef.current = checkPayment;
 
-  const startVerification = () => {
+  const startPolling = (options: { showWaitingUi?: boolean } = {}) => {
     if (verificationStarted.current || !paymentId) return;
     verificationStarted.current = true;
     pollCancelledRef.current = false;
     pollAttemptsRef.current = 0;
-    overlayOpacity.setValue(1);
-    setPhase('waiting');
-    setRequestMessage(defaultRequestMessage);
+
+    if (options.showWaitingUi !== false) {
+      overlayOpacity.setValue(1);
+      setPhase('waiting');
+      setRequestMessage(defaultRequestMessage);
+    }
 
     const plan = getPaymentPollingPlan(paymentMethod, Date.now() - startedAtRef.current);
     scheduleCheck(plan.firstDelayMs);
   };
+
+  const startVerification = () => startPolling({ showWaitingUi: !isNativeCapitecPay });
 
   // Block the callback navigation itself: returning false stops the WebView
   // from rendering the raw callback/response HTML at all.
@@ -559,12 +580,15 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   };
 
   useEffect(() => {
-    if (Platform.OS === 'web' && authorizationUrl) {
+    // On web the callback is observable in the iframe. On native Capitec Pay
+    // approval happens in the Capitec app, so polling must begin immediately;
+    // waiting for a WebView callback leaves the order stuck in "pending".
+    if (authorizationUrl && (Platform.OS === 'web' || isNativeCapitecPay)) {
       startVerification();
     }
     // startVerification is intentionally keyed to the request identifiers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorizationUrl, paymentId]);
+  }, [authorizationUrl, paymentId, isNativeCapitecPay]);
 
   // The request is non-dismissible until it settles, so a back gesture can no
   // longer expose the empty checkout behind it.
@@ -623,8 +647,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
         } catch {
           // Ignore: the order will settle from the webhook as well.
         }
-        await cartService.clearCart();
-        setPhase('success');
+        await settlePaid();
         return;
       }
       navigateHome();
@@ -665,9 +688,11 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      <Header title={isCapitecPay ? 'Capitec Pay' : 'Secure Payment'} showBack onBackPress={onBack} />
+      {!isNativeCapitecPay && (
+        <Header title={isCapitecPay ? 'Capitec Pay' : 'Secure Payment'} showBack onBackPress={onBack} />
+      )}
 
-      {isCapitecPay && (
+      {isCapitecPay && !isNativeCapitecPay && (
         <View style={[styles.capitecHint, { backgroundColor: colors.cardBackground }]}>
           <Text style={[typography.bodySmall, { color: colors.subtext }]}>
             Choose Capitec Pay, then approve the request in your Capitec app.
