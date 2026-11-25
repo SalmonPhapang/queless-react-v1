@@ -85,7 +85,9 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+    <Stack.Navigator
+      screenOptions={{ headerShown: false, statusBarHidden: true, animation: 'slide_from_right' }}
+    >
       <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="Auth" component={AuthNavigator} />
       <Stack.Screen name="Onboarding" component={OnboardingScreen} />

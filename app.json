@@ -51,9 +51,30 @@
         }
       ],
       [
+        "expo-status-bar",
+        {
+          "hidden": true
+        }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "hidden": true,
+          "enforceContrast": false
+        }
+      ],
+      [
         "expo-notifications",
         {
           "color": "#D13540"
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "organization": "source-code-development",
+          "project": "queless-customer"
         }
       ]
     ],

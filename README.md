@@ -14,6 +14,11 @@ npm run web        # browser debugging at http://localhost:19006
 All Expo commands go through `scripts/expo.js`, which sets `EXPO_NO_CACHE=1`
 to avoid the Expo CLI cache crash previously seen on Node 26.
 
+The native builds run edge-to-edge: the Android navigation bar and status bar
+are hidden, and the iOS status bar is hidden, on every screen including login.
+The installed web app requests fullscreen PWA display; browser chrome outside an
+installed PWA cannot be hidden by the app.
+
 SDK 58 requires Node 22.13+, 24.3+, or 26+. Expo Go for SDK 58 may not be in
 the app stores yet; use a development build if the QR code will not open.
 
@@ -86,6 +91,15 @@ project:
 
 `vercel.json` also adds an SPA fallback so deep links are served by
 `dist/index.html`.
+
+`npm run build:web` exports external source maps and uploads them to the
+`queless-customer` Sentry project after copying the service-worker assets. The
+Vercel project has `SENTRY_AUTH_TOKEN` as a Secret variable in Production,
+Preview and Development; the token is never written to the bundle or passed on
+a command line. Native EAS builds upload source maps/debug symbols
+automatically through the Sentry Expo plugin when the same token is present in
+the build environment. For a manual EAS Update/export upload, pull the token
+locally and run `npm run sourcemaps:upload`.
 
 Client-side configuration must use `EXPO_PUBLIC_*` names because Expo inlines
 those values into the web bundle. The Vercel project is configured with the

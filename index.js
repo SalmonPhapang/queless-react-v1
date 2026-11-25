@@ -1,3 +1,4 @@
+import { wrapApp } from './src/sentry';
 import 'react-native-gesture-handler';
 import '@expo/metro-runtime';
 import { registerRootComponent } from 'expo';
@@ -8,4 +9,4 @@ import App from './App';
 // and cart. SplashScreen.tsx hides it once the first real screen is ready.
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
-registerRootComponent(App);
+registerRootComponent(wrapApp(App));

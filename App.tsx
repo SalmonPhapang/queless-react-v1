@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { Linking } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { NAVIGATION_FONTS, useAppFonts } from './src/theme/fonts';
@@ -15,6 +16,32 @@ import { flushPendingNotificationTap, handleCurrentNotificationUrl } from './src
 // Keep the branded splash visible until the custom font is ready, so text never
 // flashes in the platform default font before Plus Jakarta Sans loads.
 SplashScreen.preventAutoHideAsync();
+
+function useFullscreen() {
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const hideSystemBars = () => {
+      StatusBar.setHidden(true);
+      if (Platform.OS === 'android') NavigationBar.setHidden(true);
+    };
+    const hideAfterTransitions = () => {
+      hideSystemBars();
+      timers.push(setTimeout(hideSystemBars, 250));
+    };
+
+    hideAfterTransitions();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') hideAfterTransitions();
+    });
+
+    return () => {
+      subscription.remove();
+      timers.forEach(clearTimeout);
+    };
+  }, []);
+}
 
 const Root: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -57,7 +84,8 @@ const Root: React.FC = () => {
         flushPendingNotificationTap();
       }}
     >
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <StatusBar hidden style="light" />
+      <NavigationBar hidden />
       <AppNavigator />
     </NavigationContainer>
   );
@@ -65,6 +93,7 @@ const Root: React.FC = () => {
 
 export default function App() {
   const [fontsLoaded, fontsError] = useAppFonts();
+  useFullscreen();
 
   useEffect(() => {
     if (fontsLoaded || fontsError) {

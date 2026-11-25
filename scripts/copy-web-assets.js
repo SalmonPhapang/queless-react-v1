@@ -13,6 +13,9 @@ if (!fs.existsSync(source)) process.exit(0);
 fs.mkdirSync(destination, { recursive: true });
 for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
   if (!entry.isFile()) continue;
+  // Expo injects the bundle script into public/index.html during export.
+  // Copying the raw template here would overwrite that generated output.
+  if (entry.name === 'index.html') continue;
   fs.copyFileSync(path.join(source, entry.name), path.join(destination, entry.name));
 }
 console.log('Copied public assets into dist');

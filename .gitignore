@@ -49,3 +49,5 @@ Thumbs.db
 # Generated/cache files
 coverage/
 *.tsbuildinfo
+.vercel
+.env*
