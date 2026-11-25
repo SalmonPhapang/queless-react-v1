@@ -157,14 +157,15 @@ Enable Capitec Pay in the Paystack dashboard under **Settings > Preferences >
 Payments > Accept payments via** and complete any required KYC approval.
 The customer approves the request in the Capitec app.
 
-Approval is asynchronous. On mobile the app leaves the Paystack checkout chrome
-in place (no duplicate Capitec header or hint) and starts verification
-immediately after the request is sent, because the approval happens in the
-Capitec app and often never produces a WebView callback. Verification waits at
-least 90 seconds before the first requery and then polls no faster than every
-10 seconds (up to ~5 minutes). Once payment is confirmed, the app clears the
-cart and opens order tracking directly. On web, the callback starts the same
-verification and shows the request-sent screen while it waits.
+Approval is asynchronous. On mobile the app never replaces Paystack's checkout
+with a custom "Request sent" page: the WebView stays visible and verification
+runs silently behind it. Verification starts when the payment screen opens and
+is checked again as soon as the app returns from the Capitec app, because bank
+approval often produces no WebView callback. `verify-paystack-split` still
+enforces Capitec's ~90 second requery cool-off from payment creation, then polls
+no faster than every 10 seconds (up to ~5 minutes). Once payment is confirmed,
+the app clears the cart and opens order tracking directly. On web, the callback
+starts the same verification and shows the request-sent screen while it waits.
 `verify-paystack-split` calls Paystack's `capitec-pay/requery/{reference}`
 server-side and treats a pending result as "still waiting" rather than a failed
 payment. A successful webhook or normal transaction verification still completes

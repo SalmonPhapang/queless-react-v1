@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
+  AppState,
   BackHandler,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -362,9 +363,9 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   const { colors, typography } = useTheme();
   const { authorizationUrl, reference, orderId, paymentId, paymentMethod, amount } = route.params || {};
   const isCapitecPay = needsApprovalPolling(paymentMethod);
-  // Native Capitec checkout is Paystack-owned: no duplicate app header or hint,
-  // and no custom "request sent" screen over Paystack's own instructions.
-  const isNativeCapitecPay = isCapitecPay && Platform.OS !== 'web';
+  const isNativePayment = Platform.OS !== 'web';
+  // Native Capitec checkout is Paystack-owned: no duplicate app header or hint.
+  const isNativeCapitecPay = isCapitecPay && isNativePayment;
   const methodLabel = isCapitecPay
     ? 'Capitec Pay'
     : paymentMethod === 'instantEft'
@@ -412,7 +413,10 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollAttemptsRef = useRef(0);
   const pollCancelledRef = useRef(false);
+  const terminalRef = useRef(false);
+  const checkingRef = useRef(false);
   const checkPaymentRef = useRef<() => Promise<void>>(async () => {});
+  const startPollingRef = useRef<(options?: { immediate?: boolean }) => void>(() => {});
 
   const clearPollTimer = useCallback(() => {
     if (pollTimerRef.current) {
@@ -467,11 +471,13 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   const settlePaid = async () => {
     clearPollTimer();
     pollCancelledRef.current = true;
+    terminalRef.current = true;
     await cartService.clearCart();
 
-    if (isNativeCapitecPay) {
-      // Capitec approval happens outside the WebView, so there is no callback
-      // to act on. Once verification confirms payment, go straight to tracking.
+    if (isNativePayment) {
+      // On mobile Paystack owns the checkout UI. Once any method is verified,
+      // leave the WebView and open tracking directly — no app-owned success
+      // screen and no custom "request sent" page in front of the gateway.
       goToTracking();
       return;
     }
@@ -482,6 +488,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   const failVerification = (title: string, message: string) => {
     clearPollTimer();
     pollCancelledRef.current = true;
+    terminalRef.current = true;
     verificationStarted.current = false;
     setCancelError('');
     setFailTitle(title);
@@ -499,9 +506,14 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   // verify-paystack-split also requeries Capitec Pay, so this single check
   // covers both transaction status and Capitec approval status.
   const checkPayment = async () => {
-    if (!paymentId || pollCancelledRef.current) return;
+    if (!paymentId || pollCancelledRef.current || checkingRef.current) return;
+    checkingRef.current = true;
 
     const plan = getPaymentPollingPlan(paymentMethod, Date.now() - startedAtRef.current);
+    // An early check (for example when the customer returns from the Capitec
+    // app) must still honour the plan's first delay. Only later checks use the
+    // short interval; the server independently enforces Capitec's 90s requery.
+    const nextDelay = pollAttemptsRef.current === 0 ? plan.firstDelayMs : plan.intervalMs;
 
     try {
       const result = await paymentService.verifyPaystackPayment(paymentId, reference);
@@ -522,7 +534,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
       setRequestMessage(
         isCapitecPay ? 'Still waiting for your approval…' : 'We’re checking again in a moment…'
       );
-      scheduleCheck(plan.intervalMs);
+      scheduleCheck(nextDelay);
     } catch (e: any) {
       if (pollAttemptsRef.current >= plan.maxAttempts) {
         failVerification(
@@ -535,16 +547,21 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
 
       pollAttemptsRef.current += 1;
       setRequestMessage('We’re still checking — please keep this screen open.');
-      scheduleCheck(plan.intervalMs);
+      scheduleCheck(nextDelay);
+    } finally {
+      checkingRef.current = false;
     }
   };
   checkPaymentRef.current = checkPayment;
 
-  const startPolling = (options: { showWaitingUi?: boolean } = {}) => {
-    if (verificationStarted.current || !paymentId) return;
+  const startPolling = (options: { showWaitingUi?: boolean; immediate?: boolean } = {}) => {
+    if (!paymentId || terminalRef.current) return;
+    const alreadyStarted = verificationStarted.current;
+    if (alreadyStarted && !options.immediate) return;
+
     verificationStarted.current = true;
     pollCancelledRef.current = false;
-    pollAttemptsRef.current = 0;
+    if (!alreadyStarted) pollAttemptsRef.current = 0;
 
     if (options.showWaitingUi !== false) {
       overlayOpacity.setValue(1);
@@ -552,11 +569,20 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
       setRequestMessage(defaultRequestMessage);
     }
 
+    if (options.immediate) {
+      // A resume from the Capitec app can mean approval already happened.
+      // Check now; the server will skip an early requery if it is too soon.
+      clearPollTimer();
+      void checkPaymentRef.current();
+      return;
+    }
+
     const plan = getPaymentPollingPlan(paymentMethod, Date.now() - startedAtRef.current);
     scheduleCheck(plan.firstDelayMs);
   };
+  startPollingRef.current = startPolling;
 
-  const startVerification = () => startPolling({ showWaitingUi: !isNativeCapitecPay });
+  const startVerification = () => startPolling({ showWaitingUi: Platform.OS === 'web' });
 
   // Block the callback navigation itself: returning false stops the WebView
   // from rendering the raw callback/response HTML at all.
@@ -580,15 +606,24 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
   };
 
   useEffect(() => {
-    // On web the callback is observable in the iframe. On native Capitec Pay
-    // approval happens in the Capitec app, so polling must begin immediately;
-    // waiting for a WebView callback leaves the order stuck in "pending".
-    if (authorizationUrl && (Platform.OS === 'web' || isNativeCapitecPay)) {
-      startVerification();
-    }
+    // Mobile never shows a custom waiting page: the WebView stays visible and
+    // verification runs silently behind it. Web still uses the callback-driven
+    // request-sent screen.
+    if (authorizationUrl) startVerification();
     // startVerification is intentionally keyed to the request identifiers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorizationUrl, paymentId, isNativeCapitecPay]);
+  }, [authorizationUrl, paymentId]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    // Capitec approval happens in the banking app, so there is no WebView
+    // callback to trigger verification. Coming back to the foreground is the
+    // reliable signal that the customer may have approved the request.
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') startPollingRef.current({ immediate: true });
+    });
+    return () => subscription.remove();
+  }, []);
 
   // The request is non-dismissible until it settles, so a back gesture can no
   // longer expose the empty checkout behind it.
@@ -658,7 +693,7 @@ export const PaystackPaymentScreen: React.FC<{ navigation: any; route: any }> = 
     }
   };
 
-  if (phase === 'waiting') {
+  if (phase === 'waiting' && Platform.OS === 'web') {
     return (
       <RequestSentState
         message={requestMessage}
