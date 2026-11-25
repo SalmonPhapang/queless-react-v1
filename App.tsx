@@ -2,11 +2,14 @@ import React, { useEffect } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { NAVIGATION_FONTS, useAppFonts } from './src/theme/fonts';
 import { ThemeProvider, useTheme } from './src/theme/theme';
+import {
+  hideAndroidNavigationBar,
+  NavigationBarComponent,
+} from './src/utils/navigationBar';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
@@ -24,7 +27,7 @@ function useFullscreen() {
     const timers: ReturnType<typeof setTimeout>[] = [];
     const hideSystemBars = () => {
       StatusBar.setHidden(true);
-      if (Platform.OS === 'android') NavigationBar.setHidden(true);
+      if (Platform.OS === 'android') hideAndroidNavigationBar();
     };
     const hideAfterTransitions = () => {
       hideSystemBars();
@@ -85,7 +88,7 @@ const Root: React.FC = () => {
       }}
     >
       <StatusBar hidden style="light" />
-      <NavigationBar hidden />
+      {NavigationBarComponent ? <NavigationBarComponent hidden /> : null}
       <AppNavigator />
     </NavigationContainer>
   );

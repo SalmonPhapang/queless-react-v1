@@ -17,7 +17,10 @@ to avoid the Expo CLI cache crash previously seen on Node 26.
 The native builds run edge-to-edge: the Android navigation bar and status bar
 are hidden, and the iOS status bar is hidden, on every screen including login.
 The installed web app requests fullscreen PWA display; browser chrome outside an
-installed PWA cannot be hidden by the app.
+installed PWA cannot be hidden by the app. Expo Go and stale dev clients do not
+include the native navigation-bar module, so the app skips that override instead
+of crashing. Use a fresh native build/dev client for hidden bars and native
+Sentry reporting.
 
 SDK 58 requires Node 22.13+, 24.3+, or 26+. Expo Go for SDK 58 may not be in
 the app stores yet; use a development build if the QR code will not open.
