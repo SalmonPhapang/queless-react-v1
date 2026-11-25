@@ -361,7 +361,7 @@ export const ProductOptionsScreen: React.FC<ProductOptionsScreenProps> = ({ navi
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={[typography.titleMedium, { color: '#FFFFFF', fontWeight: '800' }]}>
-                Add to Cart Â· {appConfig.formatCurrency(total)}
+                Add to Cart {appConfig.formatCurrency(total)}
               </Text>
             )}
           </TouchableOpacity>

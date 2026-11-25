@@ -310,7 +310,7 @@ export const CartScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         >
           <Text style={[typography.titleMedium, { color: '#FFFFFF', fontWeight: '700' }]}>
             {canCheckout
-              ? `Proceed to Checkout · ${appConfig.formatCurrency(total)}`
+              ? 'Checkout'
               : storeClosed
               ? 'Store currently closed'
               : meetsMinimum

@@ -280,7 +280,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                 <ActivityIndicator color={colors.surface} />
               ) : (
                 <Text style={[typography.titleMedium, { color: colors.surface, fontWeight: '800' }]}>
-                  Add â€¢ {appConfig.formatCurrency(product.price * quantity)}
+                  Add {appConfig.formatCurrency(product.price * quantity)}
                 </Text>
               )}
             </TouchableOpacity>

@@ -56,7 +56,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
 
           <View style={[styles.agePill, { backgroundColor: colors.errorContainer }]}>
             <Text style={[typography.labelMedium, { color: colors.error, fontWeight: '800' }]}>
-              18+ Only â€¢ Drink Responsibly
+              18+ Only. Drink Responsibly
             </Text>
           </View>
         </View>
