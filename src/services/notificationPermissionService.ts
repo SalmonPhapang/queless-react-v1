@@ -1,13 +1,18 @@
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsTypes from 'expo-notifications';
 import { Platform } from 'react-native';
 import { supabase } from '../config/supabaseClient';
+import { getNotificationsModule } from '../utils/nativeNotifications';
 import { subscribeToWebPush, unsubscribeFromWebPush } from './webPushService';
 
 const ORDER_CHANNEL_ID = 'order-updates';
 
-const isAuthorized = (status: Notifications.NotificationPermissionsStatus): boolean =>
-  status.granted ||
-  status.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+const isAuthorized = (status: NotificationsTypes.NotificationPermissionsStatus): boolean => {
+  const notifications = getNotificationsModule();
+  return (
+    status.granted ||
+    (!!notifications && status.ios?.status === notifications.IosAuthorizationStatus.PROVISIONAL)
+  );
+};
 
 /**
  * Flutter's PermissionRequestScreen asks for location and notifications before
@@ -20,8 +25,11 @@ export const notificationPermissionService = {
     if (Platform.OS === 'web') {
       return typeof Notification !== 'undefined' && Notification.permission === 'granted';
     }
+    const notifications = getNotificationsModule();
+    if (!notifications) return false;
+
     try {
-      return isAuthorized(await Notifications.getPermissionsAsync());
+      return isAuthorized(await notifications.getPermissionsAsync());
     } catch (error) {
       console.warn('Could not read notification permission:', error);
       return false;
@@ -31,21 +39,24 @@ export const notificationPermissionService = {
   async requestPermission(): Promise<boolean> {
     if (Platform.OS === 'web') return subscribeToWebPush();
 
+    const notifications = getNotificationsModule();
+    if (!notifications) return false;
+
     try {
       if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync(ORDER_CHANNEL_ID, {
+        await notifications.setNotificationChannelAsync(ORDER_CHANNEL_ID, {
           name: 'Order updates',
           description: 'Delivery progress and driver arrival updates',
-          importance: Notifications.AndroidImportance.MAX,
+          importance: notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#D13540',
         });
       }
 
-      const existing = await Notifications.getPermissionsAsync();
+      const existing = await notifications.getPermissionsAsync();
       if (isAuthorized(existing)) return true;
 
-      const result = await Notifications.requestPermissionsAsync({
+      const result = await notifications.requestPermissionsAsync({
         ios: {
           allowAlert: true,
           allowBadge: true,

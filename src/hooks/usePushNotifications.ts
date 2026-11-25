@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
+import { getNotificationsModule } from '../utils/nativeNotifications';
 import { appConfig } from '../config/appConfig';
 import { supabase } from '../config/supabaseClient';
 import { emitPushReceived } from '../services/pushEvents';
@@ -23,8 +23,9 @@ const CUSTOMER_PUSH_TOKEN_KEY = 'queless_customer_push_token';
  * prompts on startup, and it removes delivery instruments on sign-out.
  */
 
-if (Platform.OS !== 'web') {
-  Notifications.setNotificationHandler({
+const bootstrapNotifications = getNotificationsModule();
+if (Platform.OS !== 'web' && bootstrapNotifications) {
+  bootstrapNotifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,
       shouldShowList: true,
@@ -36,14 +37,17 @@ if (Platform.OS !== 'web') {
 
 async function registerExpoToken(userId: string): Promise<void> {
   if (!appConfig.enableNotifications) return;
+  const notifications = getNotificationsModule();
+  if (!notifications) return;
+
   try {
-    const permission = await Notifications.getPermissionsAsync();
+    const permission = await notifications.getPermissionsAsync();
     const authorized =
       permission.granted ||
-      permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+      permission.ios?.status === notifications.IosAuthorizationStatus.PROVISIONAL;
     if (!authorized) return;
 
-    const { data } = await Notifications.getExpoPushTokenAsync({
+    const { data } = await notifications.getExpoPushTokenAsync({
       projectId: appConfig.push.easProjectId,
     });
     if (!data) return;
@@ -71,12 +75,13 @@ async function registerExpoToken(userId: string): Promise<void> {
 async function removeExpoToken(userId: string): Promise<void> {
   if (Platform.OS === 'web') return;
 
+  const notifications = getNotificationsModule();
   let token = await AsyncStorage.getItem(CUSTOMER_PUSH_TOKEN_KEY);
-  if (!token && appConfig.enableNotifications) {
+  if (!token && appConfig.enableNotifications && notifications) {
     // The cache can be missing after an app upgrade. Derive the same token
     // rather than falling back to a broad provider-wide delete.
     try {
-      const { data } = await Notifications.getExpoPushTokenAsync({
+      const { data } = await notifications.getExpoPushTokenAsync({
         projectId: appConfig.push.easProjectId,
       });
       token = data || null;
@@ -134,19 +139,22 @@ export function usePushNotifications(): void {
         }),
       );
     } else {
-      const received = Notifications.addNotificationReceivedListener(() => emitPushReceived());
-      disposers.push(() => received.remove());
-      const response = Notifications.addNotificationResponseReceivedListener((event) => {
-        handleNotificationData(event.notification.request.content.data);
-      });
-      disposers.push(() => response.remove());
+      const notifications = getNotificationsModule();
+      if (notifications) {
+        const received = notifications.addNotificationReceivedListener(() => emitPushReceived());
+        disposers.push(() => received.remove());
+        const response = notifications.addNotificationResponseReceivedListener((event) => {
+          handleNotificationData(event.notification.request.content.data);
+        });
+        disposers.push(() => response.remove());
 
-      // A tap that launched the app can arrive before the listener above is
-      // registered. Handle and clear the stored response once on startup.
-      const lastResponse = Notifications.getLastNotificationResponse();
-      if (lastResponse) {
-        handleNotificationData(lastResponse.notification.request.content.data);
-        Notifications.clearLastNotificationResponse();
+        // A tap that launched the app can arrive before the listener above is
+        // registered. Handle and clear the stored response once on startup.
+        const lastResponse = notifications.getLastNotificationResponse();
+        if (lastResponse) {
+          handleNotificationData(lastResponse.notification.request.content.data);
+          notifications.clearLastNotificationResponse();
+        }
       }
     }
 
