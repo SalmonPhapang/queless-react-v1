@@ -11,22 +11,23 @@ export class PromoCodeError extends Error {
   }
 }
 
-interface PromoRow {
-  id: string;
-  code: string;
-  is_active: boolean | null;
-  start_date: string | null;
-  end_date: string | null;
-  min_order_amount: number | string | null;
-  usage_limit_total: number | null;
-  current_usage_total: number | null;
-  applicable_order_types: string[] | null;
-  applicable_store_ids: string[] | null;
-  discount_type: string | null;
-  discount_scope: string | null;
-  discount_value: number | string | null;
-  max_discount_amount: number | string | null;
-  target_products: string[] | null;
+interface PromoValidationRow {
+  ok: boolean;
+  reason_code: string;
+  user_message: string;
+  discount: number | string | null;
+  promo: {
+    id?: string;
+    code?: string;
+    discountType?: string;
+    discountScope?: string;
+    discountValue?: number | string | null;
+    maxDiscountAmount?: number | string | null;
+    minOrderAmount?: number | string | null;
+    targetProducts?: string[] | null;
+    freeDelivery?: boolean;
+    expectedDiscount?: number | string | null;
+  } | null;
 }
 
 const num = (value: unknown): number => {
@@ -35,91 +36,85 @@ const num = (value: unknown): number => {
 };
 
 /**
- * Port of PromoCodeService.validatePromoCode from the Flutter app.
+ * Server-authoritative promo validation.
  *
- * Mirrors the server-side validation in orders-create / create_order_geo_guard:
- * inactive, out-of-date, under-minimum, over-limit, wrong-order-type and
- * wrong-store promos are all rejected with a reason the customer can act on.
+ * The SQL RPC `validate_promo_code_by_code` is the same validator used by
+ * `create_order_geo_guard` when the order is actually placed, so active dates,
+ * spend minimums, per-user limits, first-order rules, store/order-type scoping
+ * and product targeting are no longer only client-side checks.
  */
 export const promoCodeService = {
   async validate(
     code: string,
-    context: { subtotal: number; storeId: string; orderType: 'Food' | 'Liquor' }
+    context: {
+      subtotal: number;
+      storeId: string;
+      orderType: 'Food' | 'Liquor';
+      items?: Array<{ productId: string; totalPrice: number }>;
+    }
   ): Promise<AppliedPromo> {
     const trimmed = code.trim();
     if (!trimmed) {
       throw new PromoCodeError('EMPTY', 'Enter a promo code.');
     }
 
-    const { data, error } = await supabase
-      .from('promo_codes')
-      .select(
-        'id, code, is_active, start_date, end_date, min_order_amount, usage_limit_total, current_usage_total, applicable_order_types, applicable_store_ids, discount_type, discount_scope, discount_value, max_discount_amount, target_products'
-      )
-      .ilike('code', trimmed)
-      .maybeSingle();
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      throw new PromoCodeError('UNAUTHORIZED', 'Please sign in again to use a promo code.');
+    }
+
+    const { data, error } = await supabase.rpc('validate_promo_code_by_code', {
+      p_code: trimmed,
+      p_user_id: authData.user.id,
+      p_subtotal: context.subtotal,
+      p_store_id: context.storeId,
+      p_order_type: context.orderType,
+      p_items: (context.items ?? []).map((item) => ({
+        product_id: item.productId,
+        total_price: item.totalPrice,
+      })),
+      // At apply time the free-delivery discount has not been folded into the
+      // cart fee yet. The order RPC re-checks with the final fee.
+      p_delivery_fee: null,
+    });
 
     if (error) {
       throw new PromoCodeError('LOOKUP_FAILED', 'We could not check that code. Please try again.');
     }
-    if (!data) {
-      throw new PromoCodeError('NOT_FOUND', 'That promo code does not exist.');
-    }
 
-    const promo = data as PromoRow;
-    const now = Date.now();
-
-    if (promo.is_active === false) {
-      throw new PromoCodeError('INACTIVE', 'This promo code is no longer active.');
+    const row = (Array.isArray(data) ? data?.[0] : data) as PromoValidationRow | null | undefined;
+    if (!row) {
+      throw new PromoCodeError('LOOKUP_FAILED', 'We could not check that code. Please try again.');
     }
-    if (promo.start_date && new Date(promo.start_date).getTime() > now) {
-      throw new PromoCodeError('NOT_STARTED', 'This promo code is not active yet.');
-    }
-    if (promo.end_date && new Date(promo.end_date).getTime() < now) {
-      throw new PromoCodeError('EXPIRED', 'This promo code has expired.');
-    }
-    if (context.subtotal < num(promo.min_order_amount)) {
+    if (!row.ok) {
       throw new PromoCodeError(
-        'MIN_ORDER',
-        `Spend at least R ${num(promo.min_order_amount).toFixed(2)} to use this code.`
-      );
-    }
-    if (
-      promo.usage_limit_total != null &&
-      num(promo.current_usage_total) >= Number(promo.usage_limit_total)
-    ) {
-      throw new PromoCodeError('USAGE_LIMIT', 'This promo code has reached its usage limit.');
-    }
-
-    const orderTypes = promo.applicable_order_types ?? [];
-    if (orderTypes.length > 0 && !orderTypes.includes(context.orderType)) {
-      throw new PromoCodeError(
-        'ORDER_TYPE',
-        `This code only applies to ${orderTypes.join(' / ')} orders.`
+        row.reason_code || 'INVALID',
+        row.user_message || 'That promo code could not be applied.'
       );
     }
 
-    const storeIds = promo.applicable_store_ids ?? [];
-    if (storeIds.length > 0 && !storeIds.includes(context.storeId)) {
-      throw new PromoCodeError('STORE', 'This promo code does not apply to this store.');
-    }
+    const promo = row.promo ?? {};
+    const rawType = promo.discountType ?? 'fixed';
+    const rawScope = promo.discountScope ?? 'order';
 
     return {
-      id: promo.id,
-      code: promo.code,
-      discountType: (promo.discount_type ?? 'fixed') as AppliedPromo['discountType'],
-      discountScope: (promo.discount_scope ?? 'order') as AppliedPromo['discountScope'],
-      discountValue: num(promo.discount_value),
+      id: String(promo.id ?? ''),
+      code: String(promo.code ?? trimmed),
+      discountType: (['percentage', 'fixed', 'free_delivery'].includes(rawType)
+        ? rawType
+        : 'fixed') as AppliedPromo['discountType'],
+      discountScope: (rawScope === 'product' ? 'product' : 'order') as AppliedPromo['discountScope'],
+      discountValue: num(promo.discountValue),
       maxDiscountAmount:
-        promo.max_discount_amount == null ? undefined : num(promo.max_discount_amount),
-      minOrderAmount: num(promo.min_order_amount),
-      targetProducts: promo.target_products ?? [],
-      freeDelivery: promo.discount_type === 'free_delivery',
+        promo.maxDiscountAmount == null ? undefined : num(promo.maxDiscountAmount),
+      minOrderAmount: promo.minOrderAmount == null ? undefined : num(promo.minOrderAmount),
+      targetProducts: promo.targetProducts ?? [],
+      freeDelivery: Boolean(promo.freeDelivery || rawType === 'free_delivery'),
     };
   },
 
   /**
-   * Discount for the current cart. Mirrors the server's calculateDiscount:
+   * Discount for the current cart. Mirrors the server validator's calculation:
    * order/product scope, percentage/fixed, capped by max_discount_amount.
    */
   calculateDiscount(

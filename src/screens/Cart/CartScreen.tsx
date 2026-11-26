@@ -106,6 +106,10 @@ export const CartScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         subtotal,
         storeId: cart.storeId,
         orderType: isFood ? 'Food' : 'Liquor',
+        items: cart.items.map((item) => ({
+          productId: item.productId,
+          totalPrice: item.price * item.quantity,
+        })),
       });
       await cartService.applyPromo(promo);
       setPromoInput('');
