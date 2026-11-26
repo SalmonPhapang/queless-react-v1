@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/theme';
@@ -8,20 +8,31 @@ import { notificationPermissionService } from '../../services/notificationPermis
 import { authService } from '../../services/authService';
 import { appConfig } from '../../config/appConfig';
 
+// Native push stays behind its feature flag. Browser push is available on web
+// independently, so the PWA gets its own tile and prompt as well.
+const notificationsEnabled =
+  appConfig.enableNotifications || (Platform.OS === 'web' && appConfig.push.webEnabled);
+
+type PermissionKind = 'location' | 'notifications';
+
 /**
- * Explains why Queless needs location and notifications before the OS prompts
- * appear. Asking cold on the first Home render is how apps get permanently
- * denied; this screen gives the customer context and a settings escape hatch.
+ * Port of Flutter's PermissionRequestScreen: one screen, one tile per
+ * permission, one OS prompt per tap, and Continue only once every shown
+ * permission is granted. The two prompts are never fired from a single tap.
  */
 export const LocationPermissionScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, typography } = useTheme();
-  const [busy, setBusy] = useState(false);
-  // Native push stays behind its feature flag. Browser push is available on
-  // web independently so the PWA can subscribe after the same prompt.
-  const notificationsEnabled =
-    appConfig.enableNotifications || (Platform.OS === 'web' && appConfig.push.webEnabled);
+  const [checking, setChecking] = useState(true);
+  const [locationGranted, setLocationGranted] = useState(false);
+  const [notificationsGranted, setNotificationsGranted] = useState(!notificationsEnabled);
+  const [requesting, setRequesting] = useState<PermissionKind | null>(null);
 
-  const continueToApp = async () => {
+  const bothGranted = useCallback(
+    (location: boolean, notifications: boolean) => location && notifications,
+    []
+  );
+
+  const continueToApp = useCallback(async () => {
     await AsyncStorage.setItem('location_prompt_seen', 'true');
     if (notificationsEnabled) {
       await AsyncStorage.setItem('notifications_prompt_seen', 'true');
@@ -32,92 +43,141 @@ export const LocationPermissionScreen: React.FC<{ navigation: any }> = ({ naviga
     } else {
       navigation.replace('MainTabs');
     }
-  };
+  }, [navigation]);
 
-  const requestLocation = async () => {
-    setBusy(true);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const location = await locationService.hasPermission();
+        const notifications = notificationsEnabled
+          ? await notificationPermissionService.hasPermission()
+          : true;
+        if (!active) return;
+        setLocationGranted(location);
+        setNotificationsGranted(notifications);
+        setChecking(false);
+        // Flutter skips the screen entirely when both are already granted.
+        if (bothGranted(location, notifications)) await continueToApp();
+      } catch (error) {
+        console.warn('Could not check permissions:', error);
+        if (active) setChecking(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [bothGranted, continueToApp]);
+
+  const request = async (kind: PermissionKind) => {
+    setRequesting(kind);
     try {
-      const granted = await locationService.requestPermission();
+      const granted =
+        kind === 'location'
+          ? await locationService.requestPermission()
+          : await notificationPermissionService.requestPermission();
 
-      // Flutter's PermissionRequestScreen asks both before entering MainScreen.
-      // Notification permission follows the location prompt so the two OS
-      // dialogs never overlap.
-      if (notificationsEnabled) {
-        await notificationPermissionService.requestPermission();
-      }
+      const nextLocation = kind === 'location' ? granted : locationGranted;
+      const nextNotifications = kind === 'notifications' ? granted : notificationsGranted;
+      if (kind === 'location') setLocationGranted(granted);
+      else setNotificationsGranted(granted);
 
-      if (!granted) {
-        Alert.alert(
-          'Location is off',
-          'You can still browse, but nearby stores and delivery fees need your location. You can enable it later in Settings.',
-          [
-            { text: 'Continue', onPress: () => void continueToApp() },
-            { text: 'Open settings', onPress: () => void locationService.openLocationSettings() },
-          ]
-        );
-        return;
-      }
-      await continueToApp();
+      // Each tile asks on its own. Only when both are granted do we move on.
+      if (bothGranted(nextLocation, nextNotifications)) await continueToApp();
     } finally {
-      setBusy(false);
+      setRequesting(null);
     }
   };
 
+  const tile = (
+    icon: React.ComponentProps<typeof Ionicons>['name'],
+    title: string,
+    description: string,
+    granted: boolean,
+    kind: PermissionKind
+  ) => (
+    <View style={[styles.tile, { backgroundColor: colors.primaryContainer }]}>
+      <View style={[styles.tileIcon, { backgroundColor: colors.surface }]}>
+        <Ionicons name={icon} size={22} color={colors.secondary} />
+      </View>
+      <View style={styles.tileText}>
+        <Text style={[typography.titleSmall, { color: colors.onSurface }]}>{title}</Text>
+        <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 3, lineHeight: 17 }]}>
+          {description}
+        </Text>
+        {!granted && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() => void request(kind)}
+            disabled={requesting !== null}
+            activeOpacity={0.8}
+          >
+            <Text style={[typography.labelLarge, { color: colors.secondary, marginTop: 10 }]}>
+              {requesting === kind ? 'Requesting…' : 'Allow Access'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      {granted && <Ionicons name="checkmark-circle" size={24} color={colors.success} />}
+    </View>
+  );
+
+  if (checking) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+        <ActivityIndicator color={colors.secondary} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      <View style={[styles.iconCircle, { backgroundColor: colors.primaryContainer }]}>
-        <Ionicons name="location-outline" size={56} color={colors.secondary} />
-      </View>
-
-      <Text style={[typography.headlineMedium, { color: colors.onSurface, textAlign: 'center', marginTop: 24 }]}>
+      <Text style={[typography.headlineMedium, styles.title, { color: colors.onSurface }]}>
         Help us serve you better
       </Text>
-      <Text style={[typography.bodyMedium, { color: colors.subtext, textAlign: 'center', marginTop: 10, lineHeight: 22 }]}>
-        Queless uses a couple of permissions to make every delivery accurate and on time.
+      <Text style={[typography.bodyMedium, styles.subtitle, { color: colors.subtext }]}>
+        To provide the best delivery experience, we need a few permissions.
       </Text>
 
-      <View style={styles.permissionList}>
-        <View style={styles.permissionRow}>
-          <View style={[styles.permissionIcon, { backgroundColor: colors.primaryContainer }]}>
-            <Ionicons name="location-outline" size={22} color={colors.secondary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[typography.titleSmall, { color: colors.onSurface }]}>Location</Text>
-            <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 2 }]}>
-              Nearby stores and the correct delivery fee.
-            </Text>
-          </View>
-        </View>
-
-        {notificationsEnabled && (
-          <View style={styles.permissionRow}>
-            <View style={[styles.permissionIcon, { backgroundColor: colors.primaryContainer }]}>
-              <Ionicons name="notifications-outline" size={22} color={colors.secondary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[typography.titleSmall, { color: colors.onSurface }]}>Notifications</Text>
-              <Text style={[typography.bodySmall, { color: colors.subtext, marginTop: 2 }]}>
-                Order status and driver arrival updates.
-              </Text>
-            </View>
-          </View>
+      <View style={styles.tiles}>
+        {tile(
+          'location-outline',
+          'Location Access',
+          'We use your location to find nearby stores and track your delivery in real-time.',
+          locationGranted,
+          'location'
         )}
+        {notificationsEnabled &&
+          tile(
+            'notifications-outline',
+            'Notifications',
+            'Stay updated on your order status, driver arrival, and exclusive local deals.',
+            notificationsGranted,
+            'notifications'
+          )}
       </View>
 
       <TouchableOpacity
-        style={[styles.primaryBtn, { backgroundColor: colors.secondary }]}
-        onPress={() => void requestLocation()}
-        disabled={busy}
+        accessibilityRole="button"
+        style={[
+          styles.primaryBtn,
+          {
+            backgroundColor: colors.secondary,
+            opacity: bothGranted(locationGranted, notificationsGranted) ? 1 : 0.45,
+          },
+        ]}
+        onPress={() => void continueToApp()}
+        disabled={!bothGranted(locationGranted, notificationsGranted) || requesting !== null}
         activeOpacity={0.85}
       >
-        <Text style={[typography.titleMedium, { color: '#FFFFFF', fontWeight: '800' }]}>
-          {notificationsEnabled ? 'Allow location & notifications' : 'Allow location'}
-        </Text>
+        <Text style={[typography.titleMedium, { color: '#FFFFFF', fontWeight: '800' }]}>Continue</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
+        accessibilityRole="button"
         style={styles.skipBtn}
         onPress={() => void continueToApp()}
+        disabled={requesting !== null}
         activeOpacity={0.7}
       >
         <Text style={[typography.bodyMedium, { color: colors.subtext }]}>Not now</Text>
@@ -127,38 +187,19 @@ export const LocationPermissionScreen: React.FC<{ navigation: any }> = ({ naviga
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  iconCircle: {
-    width: 108,
-    height: 108,
-    borderRadius: 54,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  permissionList: {
-    alignSelf: 'stretch',
-    marginTop: 32,
-  },
-  permissionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  permissionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
+  container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  title: { textAlign: 'center' },
+  subtitle: { textAlign: 'center', marginTop: 10, lineHeight: 22 },
+  tiles: { marginTop: 32, gap: 14 },
+  tile: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, padding: 14 },
+  tileIcon: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  tileText: { flex: 1 },
   primaryBtn: {
     height: 54,
     borderRadius: 14,
-    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
+    marginTop: 28,
   },
-  skipBtn: { marginTop: 18, padding: 8 },
+  skipBtn: { marginTop: 16, padding: 8, alignSelf: 'center' },
 });
