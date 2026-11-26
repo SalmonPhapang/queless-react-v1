@@ -10,6 +10,13 @@
       "environment": "development",
       "credentialsSource": "remote"
     },
+    "development-ios-simulator": {
+      "developmentClient": true,
+      "environment": "development",
+      "ios": {
+        "simulator": true
+      }
+    },
     "preview": {
       "distribution": "internal",
       "environment": "preview",
