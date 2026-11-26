@@ -25,6 +25,36 @@ const PAYMENT_CODES: Record<CheckoutPaymentMethod, PaymentMethodCode> = {
   cashOnDelivery: 'cashOnDelivery',
 };
 
+/**
+ * Paid orders that count towards unlocking Cash on Delivery. The order table
+ * stores human-readable labels, including legacy EFT labels from older orders.
+ * Cash orders never count towards the requirement.
+ */
+export const COD_UNLOCK_PAYMENT_METHOD_LABELS = [
+  'Card',
+  'Instant EFT',
+  'Capitec Pay',
+  'EFT',
+  'Instant Bank Transfer',
+] as const;
+
+export const COD_UNLOCK_PAID_ORDER_COUNT = 3;
+
+export interface CodUnlockProgress {
+  allowed: boolean;
+  paidOrderCount: number;
+  requiredPaidOrders: number;
+}
+
+export function getCodUnlockProgress(paidOrderCount: number): CodUnlockProgress {
+  const count = Math.max(0, paidOrderCount);
+  return {
+    allowed: count >= COD_UNLOCK_PAID_ORDER_COUNT,
+    paidOrderCount: count,
+    requiredPaidOrders: COD_UNLOCK_PAID_ORDER_COUNT,
+  };
+}
+
 /** The value written to orders.payment_method (must match its CHECK constraint). */
 export function toOrderPaymentMethod(method: CheckoutPaymentMethod): OrderPaymentMethodLabel {
   return ORDER_LABELS[method];

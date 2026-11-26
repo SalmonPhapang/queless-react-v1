@@ -29,8 +29,10 @@ import { formatAddress } from '../../utils/address';
 import { getStoreDistanceKm, isBeyondDeliveryRadius } from '../../utils/deliveryRadius';
 import {
   CheckoutPaymentMethod,
+  getCodUnlockProgress,
   toOrderPaymentMethod,
   toPaymentMethodCode,
+  type CodUnlockProgress,
 } from '../../utils/paymentMethod';
 
 export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
@@ -42,7 +44,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('card');
   const [loading, setLoading] = useState(false);
-  const [codAllowed, setCodAllowed] = useState(false);
+  const [codProgress, setCodProgress] = useState<CodUnlockProgress>(() => getCodUnlockProgress(0));
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [, setDistanceVersion] = useState(0);
@@ -74,10 +76,10 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         );
 
         if (current?.id) {
-          const allowed = await orderService.hasCompletedPaidOrder(current.id);
+          const progress = await orderService.getCodUnlockProgress(current.id);
           if (!cancelled) {
-            setCodAllowed(allowed);
-            if (!allowed) setPaymentMethod('card');
+            setCodProgress(progress);
+            if (!progress.allowed) setPaymentMethod('card');
           }
         }
       };
@@ -142,6 +144,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
   const minimumOrder = cartService.getMinimumOrder(cart.storeId);
   const meetsMinimum = cartService.isMinimumOrderMet(cart.storeId);
   const hasAddress = !!selectedAddress;
+  const codAllowed = codProgress.allowed;
   const storeClosed = store?.isOpen === false;
   const canPlaceOrder =
     meetsMinimum && !deliveryUnavailable && hasAddress && !!user && !storeClosed;
@@ -204,6 +207,14 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         deliveryUnavailable
           ? 'This store is too far away for delivery. Delivery is only available up to 20km.'
           : `This store requires a minimum order of ${appConfig.formatCurrency(minimumOrder)}.`
+      );
+      return;
+    }
+
+    if (paymentMethod === 'cashOnDelivery' && !codAllowed) {
+      closePaymentWindow();
+      setStatusMessage(
+        `Cash on Delivery unlocks after ${codProgress.requiredPaidOrders} paid orders.`
       );
       return;
     }
@@ -490,7 +501,7 @@ export const CheckoutScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                     Cash on Delivery (locked)
                   </Text>
                   <Text style={[typography.bodySmall, { color: colors.subtext }]}>
-                    Available after your first paid order
+                    {`Unlock after ${codProgress.requiredPaidOrders} paid orders (${codProgress.paidOrderCount}/${codProgress.requiredPaidOrders})`}
                   </Text>
                 </View>
               </View>

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  COD_UNLOCK_PAID_ORDER_COUNT,
+  COD_UNLOCK_PAYMENT_METHOD_LABELS,
   checkoutPaymentMethodFromOrderLabel,
+  getCodUnlockProgress,
   getPaymentPollingPlan,
   needsApprovalPolling,
   toOrderPaymentMethod,
@@ -59,4 +62,40 @@ test('other payment methods confirm quickly without a long initial wait', () => 
       maxAttempts: 60,
     });
   }
+});
+
+test('cash on delivery unlocks after three combined paid online orders', () => {
+  assert.equal(COD_UNLOCK_PAID_ORDER_COUNT, 3);
+  assert.deepEqual([...COD_UNLOCK_PAYMENT_METHOD_LABELS], [
+    'Card',
+    'Instant EFT',
+    'Capitec Pay',
+    'EFT',
+    'Instant Bank Transfer',
+  ]);
+  assert.equal(
+    (COD_UNLOCK_PAYMENT_METHOD_LABELS as readonly string[]).includes('Cash on Delivery'),
+    false
+  );
+
+  assert.deepEqual(getCodUnlockProgress(0), {
+    allowed: false,
+    paidOrderCount: 0,
+    requiredPaidOrders: 3,
+  });
+  assert.deepEqual(getCodUnlockProgress(2), {
+    allowed: false,
+    paidOrderCount: 2,
+    requiredPaidOrders: 3,
+  });
+  assert.deepEqual(getCodUnlockProgress(3), {
+    allowed: true,
+    paidOrderCount: 3,
+    requiredPaidOrders: 3,
+  });
+  assert.deepEqual(getCodUnlockProgress(-1), {
+    allowed: false,
+    paidOrderCount: 0,
+    requiredPaidOrders: 3,
+  });
 });

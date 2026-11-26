@@ -9,6 +9,12 @@ import {
 import { DriverInfo, driverInfoFromJson, trackingUpdateFromJson } from '../models/core/orderCommon';
 import { Address } from '../models/user';
 import { emptyAddress, mapAddressRecord } from '../utils/address';
+import {
+  COD_UNLOCK_PAID_ORDER_COUNT,
+  COD_UNLOCK_PAYMENT_METHOD_LABELS,
+  getCodUnlockProgress,
+  type CodUnlockProgress,
+} from '../utils/paymentMethod';
 
 export interface CreateOrderParams {
   userId: string;
@@ -151,23 +157,24 @@ export const orderService = {
   },
 
   /**
-   * Cash on delivery is only allowed once the user has completed at least one
-   * order paid by card/EFT. This guards against first-time fraud / no-shows.
+   * Cash on delivery unlocks after three completed orders paid by Card,
+   * Instant EFT, or Capitec Pay (legacy EFT labels included) combined.
+   * Cash orders never count towards the requirement.
    */
-  async hasCompletedPaidOrder(userId: string): Promise<boolean> {
+  async getCodUnlockProgress(userId: string): Promise<CodUnlockProgress> {
     const { data, error } = await supabase
       .from('orders')
       .select('id')
       .eq('user_id', userId)
       .eq('payment_status', 'completed')
-      .neq('payment_method', 'cashOnDelivery')
-      .limit(1);
+      .in('payment_method', [...COD_UNLOCK_PAYMENT_METHOD_LABELS])
+      .limit(COD_UNLOCK_PAID_ORDER_COUNT);
 
     if (error) {
       console.warn('Could not check prior paid orders:', error.message);
-      return false;
+      return getCodUnlockProgress(0);
     }
-    return Array.isArray(data) && data.length > 0;
+    return getCodUnlockProgress(Array.isArray(data) ? data.length : 0);
   },
 
   async getUserOrders(userId: string): Promise<Order[]> {
