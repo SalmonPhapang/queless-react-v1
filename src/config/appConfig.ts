@@ -52,7 +52,7 @@ export const appConfig = {
     webEnabled: readFlag(process.env.EXPO_PUBLIC_WEB_PUSH_ENABLED, true),
     webPublicKey: process.env.EXPO_PUBLIC_WEB_PUSH_PUBLIC_KEY || DEFAULT_WEB_PUSH_PUBLIC_KEY,
     easProjectId:
-      process.env.EXPO_PUBLIC_EAS_PROJECT_ID || 'c7db493d-fb1e-46e9-92d1-270f51b14ea6',
+      process.env.EXPO_PUBLIC_EAS_PROJECT_ID || '07669b65-51e8-4c55-abcb-931ee561451a',
   },
   supabaseUrl: SUPABASE_URL,
   supabaseAnonKey: SUPABASE_ANON_KEY,

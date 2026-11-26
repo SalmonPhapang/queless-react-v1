@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Queless",
-    "slug": "queless-react-v1",
+    "slug": "queless-app",
     "version": "1.0.1",
     "scheme": "com.queless.app",
     "platforms": [
@@ -80,7 +80,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "c7db493d-fb1e-46e9-92d1-270f51b14ea6"
+        "projectId": "07669b65-51e8-4c55-abcb-931ee561451a"
       }
     }
   }
