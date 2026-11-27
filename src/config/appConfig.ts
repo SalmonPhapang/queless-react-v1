@@ -28,8 +28,17 @@ const defaultOsmAttribution =
 const DEFAULT_WEB_PUSH_PUBLIC_KEY =
   'BKzWSW-uiaeClLGMck7ptVrWnIP07zMKUuoICw-G7KRppgH59StYPCfUfcpzosF5Lelhu1spJWT6scMpbl203nw';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lxsvydiyzeavdqbjxkpp.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4c3Z5ZGl5emVhdmRxYmp4a3BwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3Njg1MDQsImV4cCI6MjA4MzM0NDUwNH0.nThX1Mj5MlKbsCsmlW8RhukSXC57kcbB9za92LwwiDQ';
+// Expo only inlines EXPO_PUBLIC_* variables into the client bundle. The legacy
+// names remain as local fallbacks; EAS builds set the public names as project
+// environment variables because .env is intentionally not committed.
+const SUPABASE_URL =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  'https://lxsvydiyzeavdqbjxkpp.supabase.co';
+const SUPABASE_ANON_KEY =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4c3Z5ZGl5emVhdmRxYmp4a3BwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3Njg1MDQsImV4cCI6MjA4MzM0NDUwNH0.nThX1Mj5MlKbsCsmlW8RhukSXC57kcbB9za92LwwiDQ';
 
 // Expo inlines only EXPO_PUBLIC_* variables into client bundles. APP_ENV is
 // kept as a fallback for native/server-side scripts.
