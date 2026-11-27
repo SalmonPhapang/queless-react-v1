@@ -69,6 +69,9 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Delivered/cancelled/refunded orders have nothing left to track live.
+  const orderIsTerminal = !!order && orderStatusHelpers.isTerminal(order.status);
+
   const handleBack = () => {
     if (fromCheckout) {
       navigation.navigate('MainTabs');
@@ -88,7 +91,9 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
     if (data) {
       setOrder(data);
       setLiveFix(
-        data.driverId ? await orderService.getLiveDriverLocation(data.driverId) : null
+        data.driverId && !orderStatusHelpers.isTerminal(data.status)
+          ? await orderService.getLiveDriverLocation(data.driverId)
+          : null
       );
       setError(null);
     } else {
@@ -100,16 +105,18 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
   useEffect(() => {
     let cancelled = false;
 
-    const load = async () => {
-      await fetchOrder();
-      if (cancelled) return;
-    };
-    load();
+    if (orderIsTerminal) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void fetchOrder();
 
     const unsubscribe = orderService.subscribeToOrderUpdates(orderId, (updated) => {
       if (cancelled) return;
       setOrder(updated);
-      if (updated.driverId) {
+      if (updated.driverId && !orderStatusHelpers.isTerminal(updated.status)) {
         void orderService.getLiveDriverLocation(updated.driverId).then((fix) => {
           if (!cancelled) setLiveFix(fix);
         });
@@ -117,16 +124,10 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
     });
 
     // Realtime is best-effort (delivery depends on the table's publication), so
-    // poll while the order is still in flight.
+    // poll while the order is still in flight. Both this and the subscriptions
+    // are torn down as soon as the order reaches a terminal status.
     const interval = setInterval(() => {
-      if (cancelled) return;
-      setOrder((current) => {
-        if (current && orderStatusHelpers.isTerminal(current.status)) {
-          return current;
-        }
-        void fetchOrder();
-        return current;
-      });
+      if (!cancelled) void fetchOrder();
     }, POLL_INTERVAL_MS);
 
     return () => {
@@ -134,15 +135,15 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
       unsubscribe();
       clearInterval(interval);
     };
-  }, [fetchOrder, orderId]);
+  }, [fetchOrder, orderId, orderIsTerminal]);
 
   useEffect(() => {
-    if (!order?.driverId) return;
+    if (!order?.driverId || orderIsTerminal) return;
     const unsubscribe = orderService.subscribeToDriverLocation(order.driverId, (fix) => {
       setLiveFix(fix);
     });
     return unsubscribe;
-  }, [order?.driverId]);
+  }, [order?.driverId, orderIsTerminal]);
 
   const destination =
     order &&
@@ -225,11 +226,25 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
       <Header title="Delivery Tracking" showBack onBackPress={handleBack} />
 
-      {destination ? (
+      {orderIsTerminal ? (
+        <View
+          style={[
+            styles.noMap,
+            { backgroundColor: colors.cardBackground, borderColor: colors.divider },
+          ]}
+        >
+          <Ionicons name="checkmark-circle-outline" size={22} color={colors.secondary} />
+          <Text style={[typography.bodySmall, { color: colors.subtext, marginLeft: 8, flex: 1 }]}>
+            {order.status === 'delivered'
+              ? 'Delivered. Live tracking is no longer available.'
+              : 'This order is closed. Live tracking is no longer available.'}
+          </Text>
+        </View>
+      ) : destination ? (
         <View style={[styles.mapContainer, { backgroundColor: colors.cardBackground }]}>
           <TrackingMap
             destination={destination}
-            driver={driverFresh ? driverFix : null}
+            driver={driverFix}
             driverLabel={order.driver?.name}
             destinationLabel="Delivery address"
           />
@@ -337,7 +352,7 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
           </View>
         )}
 
-        {bestFix && (
+        {!orderIsTerminal && bestFix && (
           <View style={styles.locationStatusRow}>
             <Ionicons
               name={driverFresh ? 'locate' : 'hourglass-outline'}
