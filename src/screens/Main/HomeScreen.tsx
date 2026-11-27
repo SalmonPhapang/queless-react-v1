@@ -22,6 +22,9 @@ import { useTheme } from '../../theme/theme';
 import { supabase } from '../../config/supabaseClient';
 import { appConfig } from '../../config/appConfig';
 import { storeService } from '../../services/storeService';
+import { orderService } from '../../services/orderService';
+import { Order } from '../../models/order';
+import { orderStatusMeta } from '../../models/statuses';
 import {
   recommendationService,
   ProductRecommendation,
@@ -67,6 +70,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [recommendedStores, setRecommendedStores] = useState<StoreRecommendation[]>([]);
   const [recommendedItems, setRecommendedItems] = useState<ProductRecommendation[]>([]);
   const [usualOrder, setUsualOrder] = useState<UsualOrder | null>(null);
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [deliveryLabel, setDeliveryLabel] = useState('Add delivery address');
   const [deliveryFullAddress, setDeliveryFullAddress] = useState('No delivery address selected');
   const [deliverySource, setDeliverySource] = useState<'current' | 'saved' | 'none'>('none');
@@ -84,6 +88,17 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [exitToast, setExitToast] = useState(false);
   const lastBackPress = useRef(0);
   const exitToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadActiveOrders = async (knownUserId?: string) => {
+    try {
+      const userId =
+        knownUserId ?? (await supabase.auth.getUser()).data.user?.id ?? undefined;
+      setActiveOrders(userId ? await orderService.getActiveOrders(userId) : []);
+    } catch (e) {
+      // A failed count must never block browsing; Orders tab still shows them.
+      console.warn('Active deliveries fetch error:', e);
+    }
+  };
 
   const getDeliveryFromManualAddress = (address: Address): DeliveryLocation =>
     deliveryLocationFromAddress(address);
@@ -120,6 +135,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData.user?.id;
+      void loadActiveOrders(userId);
 
       const [nearbyStores, storeRecs, productRecs, usual] = await Promise.all([
         coords
@@ -332,6 +348,13 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }, [locationModalVisible, navigation])
   );
 
+  // Order status changes while off-tab should show up as soon as the user returns.
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadActiveOrders();
+    }, [])
+  );
+
   // Users who skipped the permission screen still need a way back to it.
   useFocusEffect(
     React.useCallback(() => {
@@ -499,6 +522,52 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         contentContainerStyle={responsiveContentStyle(layout, styles.scrollContent)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.secondary]} />}
       >
+        {activeOrders.length > 0 && (
+          <View>
+            <TouchableOpacity
+              style={[
+                styles.activeDeliveryCard,
+                { backgroundColor: colors.cardBackground, borderColor: colors.secondary },
+              ]}
+              onPress={() => navigation.navigate('OrderTracking', { orderId: activeOrders[0].id })}
+              activeOpacity={0.9}
+            >
+              <View style={[styles.activeDeliveryIcon, { backgroundColor: colors.primaryContainer }]}>
+                <Ionicons name="bicycle" size={20} color={colors.secondary} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={[typography.labelSmall, { color: colors.secondary, fontWeight: '700' }]}>
+                  {activeOrders.length > 1
+                    ? `${activeOrders.length} ACTIVE DELIVERIES`
+                    : 'ACTIVE DELIVERY'}
+                </Text>
+                <Text style={[typography.titleSmall, { color: colors.onSurface }]} numberOfLines={1}>
+                  {activeOrders[0].storeName || 'Store'} ·{' '}
+                  {orderStatusMeta[activeOrders[0].status]?.displayName || activeOrders[0].status}
+                </Text>
+                <Text style={[typography.bodySmall, { color: colors.subtext }]} numberOfLines={1}>
+                  {activeOrders[0].driver?.name
+                    ? `Driver ${activeOrders[0].driver.name} · tap to track`
+                    : 'Finding your driver · tap to track'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.secondary} />
+            </TouchableOpacity>
+
+            {activeOrders.length > 1 && (
+              <TouchableOpacity
+                style={styles.activeDeliveryAll}
+                onPress={() => navigation.navigate('OrdersTab')}
+                activeOpacity={0.8}
+              >
+                <Text style={[typography.labelMedium, { color: colors.secondary, fontWeight: '700' }]}>
+                  View all orders
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* Search Bar */}
         <View style={styles.searchSection}>
           <View style={[styles.searchBar, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}>
@@ -1053,6 +1122,27 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 8,
     borderRadius: 12,
+  },
+  activeDeliveryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  activeDeliveryIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeDeliveryAll: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 16,
+    paddingTop: 6,
   },
   scrollContent: {
     paddingBottom: 90,

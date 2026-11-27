@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/theme';
-import { orderService } from '../../services/orderService';
+import { DriverLocationFix, orderService } from '../../services/orderService';
 import { Order } from '../../models/order';
 import { Header } from '../../components/Header';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -26,6 +26,36 @@ import { Skeleton } from '../../components/Skeleton';
 const POLL_INTERVAL_MS = 20_000;
 const DRIVER_FIX_MAX_AGE_MS = 5 * 60 * 1000;
 
+/** Prefer the fresher of the assignment snapshot and the driver's live row. */
+function pickDriverFix(
+  assignment: DriverLocationFix | null,
+  live: DriverLocationFix | null
+): DriverLocationFix | null {
+  if (!assignment) return live;
+  if (!live) return assignment;
+  const assignmentTime = fixTimestamp(assignment.updatedAt);
+  const liveTime = fixTimestamp(live.updatedAt);
+  return liveTime >= assignmentTime ? live : assignment;
+}
+
+function fixTimestamp(value?: string): number {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatFixAge(value?: string): string {
+  const timestamp = fixTimestamp(value);
+  if (!timestamp) return 'time unknown';
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 10) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} h ago`;
+}
+
 export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
   navigation,
   route,
@@ -35,6 +65,7 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
   const fromCheckout = !!route.params?.fromCheckout;
 
   const [order, setOrder] = useState<Order | null>(null);
+  const [liveFix, setLiveFix] = useState<DriverLocationFix | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +87,9 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
     const data = await orderService.getOrderById(orderId);
     if (data) {
       setOrder(data);
+      setLiveFix(
+        data.driverId ? await orderService.getLiveDriverLocation(data.driverId) : null
+      );
       setError(null);
     } else {
       setError('We could not find this order. It may have been removed.');
@@ -73,7 +107,13 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
     load();
 
     const unsubscribe = orderService.subscribeToOrderUpdates(orderId, (updated) => {
-      if (!cancelled) setOrder(updated);
+      if (cancelled) return;
+      setOrder(updated);
+      if (updated.driverId) {
+        void orderService.getLiveDriverLocation(updated.driverId).then((fix) => {
+          if (!cancelled) setLiveFix(fix);
+        });
+      }
     });
 
     // Realtime is best-effort (delivery depends on the table's publication), so
@@ -96,6 +136,14 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
     };
   }, [fetchOrder, orderId]);
 
+  useEffect(() => {
+    if (!order?.driverId) return;
+    const unsubscribe = orderService.subscribeToDriverLocation(order.driverId, (fix) => {
+      setLiveFix(fix);
+    });
+    return unsubscribe;
+  }, [order?.driverId]);
+
   const destination =
     order &&
     Number.isFinite(order.deliveryAddress?.latitude) &&
@@ -108,18 +156,19 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
       : null;
 
   const driverLocation = order?.driver?.location ?? null;
-  const driverFix =
+  const assignmentFix: DriverLocationFix | null =
     driverLocation?.latitude != null && driverLocation?.longitude != null
-      ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
+      ? {
+          latitude: driverLocation.latitude,
+          longitude: driverLocation.longitude,
+          updatedAt: driverLocation.updatedAt ?? order?.updatedAt,
+        }
       : null;
-
-  const driverFresh = (() => {
-    if (!driverFix) return false;
-    const fixTime = driverLocation?.updatedAt ?? order?.updatedAt;
-    if (!fixTime) return false;
-    const updated = new Date(fixTime).getTime();
-    return Number.isFinite(updated) && Date.now() - updated <= DRIVER_FIX_MAX_AGE_MS;
-  })();
+  const bestFix = pickDriverFix(assignmentFix, liveFix);
+  const driverFix = bestFix
+    ? { latitude: bestFix.latitude, longitude: bestFix.longitude }
+    : null;
+  const driverFresh = !!bestFix && Date.now() - fixTimestamp(bestFix.updatedAt) <= DRIVER_FIX_MAX_AGE_MS;
 
   const statusMeta = order ? orderStatusMeta[order.status] : undefined;
   const paymentOutstanding =
@@ -288,6 +337,20 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
           </View>
         )}
 
+        {bestFix && (
+          <View style={styles.locationStatusRow}>
+            <Ionicons
+              name={driverFresh ? 'locate' : 'hourglass-outline'}
+              size={16}
+              color={colors.secondary}
+            />
+            <Text style={[typography.bodySmall, { color: colors.subtext, marginLeft: 6, flex: 1 }]}>
+              {driverFresh ? 'Live driver location' : 'Last known driver location'} ·{' '}
+              {formatFixAge(bestFix.updatedAt)}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.addressRow}>
           <Ionicons name="location-outline" size={20} color={colors.subtext} style={{ marginRight: 8 }} />
           <Text style={[typography.bodySmall, { color: colors.onSurface, flex: 1 }]}>
@@ -406,6 +469,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  locationStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: -6,
+    marginBottom: 14,
   },
   addressRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   timelineRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },

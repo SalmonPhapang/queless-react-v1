@@ -3,6 +3,7 @@ import { Order, OrderItem } from '../models/order';
 import {
   OrderStatus,
   PaymentStatus,
+  canTrackOrder,
   orderStatusFromDatabaseValue,
   paymentStatusFromDatabaseValue,
 } from '../models/statuses';
@@ -49,6 +50,14 @@ export class OrderCreationError extends Error {
     this.name = 'OrderCreationError';
     this.statusCode = statusCode;
   }
+}
+
+/** A single GPS fix from `driver_locations` (the driver app's live presence row). */
+export interface DriverLocationFix {
+  latitude: number;
+  longitude: number;
+  /** ISO-8601 time of the fix. */
+  updatedAt?: string;
 }
 
 export const orderService = {
@@ -196,6 +205,15 @@ export const orderService = {
     );
   },
 
+  /**
+   * Paid, non-terminal orders. Shared by the Orders tab and Home screen so
+   * "active deliveries" always means the same thing as "can track this order".
+   */
+  async getActiveOrders(userId: string): Promise<Order[]> {
+    const orders = await this.getUserOrders(userId);
+    return orders.filter(canTrackOrder);
+  },
+
   async getOrderById(orderId: string): Promise<Order | null> {
     const { data, error } = await supabase
       .from('orders')
@@ -206,6 +224,52 @@ export const orderService = {
     if (error || !data) return null;
     const driver = await fetchDriverForOrder(orderId);
     return this.mapOrderRecord(data, data.stores?.name, driver);
+  },
+
+  /**
+   * The driver app publishes GPS to `driver_locations` every few seconds while
+   * a delivery is live. `get_driver_for_order` only carries the assignment's
+   * last snapshot, so tracking also reads this row to avoid a stale/hidden pin.
+   */
+  async getLiveDriverLocation(driverId: string): Promise<DriverLocationFix | null> {
+    const { data, error } = await supabase
+      .from('driver_locations')
+      .select('current_lat, current_lng, last_location_update')
+      .eq('driver_id', driverId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Fetch live driver location error:', error.message);
+      return null;
+    }
+    return locationFixFromRow(data);
+  },
+
+  /** Realtime updates for the live driver pin on the tracking screen. */
+  subscribeToDriverLocation(
+    driverId: string,
+    callback: (fix: DriverLocationFix) => void
+  ) {
+    const channel = supabase
+      .channel(`driver_location_${driverId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'driver_locations',
+          filter: `driver_id=eq.${driverId}`,
+        },
+        (payload) => {
+          const fix = locationFixFromRow(payload.new as Record<string, unknown> | null);
+          if (fix) callback(fix);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   },
 
   async cancelOrder(orderId: string): Promise<boolean> {
@@ -365,6 +429,21 @@ async function fetchDriversForOrders(
     if (!drivers.has(row.order_id)) drivers.set(row.order_id, row);
   }
   return drivers;
+}
+
+function locationFixFromRow(
+  row: Record<string, unknown> | null | undefined
+): DriverLocationFix | null {
+  const latitude = toFiniteNumber(row?.current_lat);
+  const longitude = toFiniteNumber(row?.current_lng);
+  if (latitude == null || longitude == null) return null;
+
+  const rawTimestamp = row?.last_location_update;
+  return {
+    latitude,
+    longitude,
+    updatedAt: typeof rawTimestamp === 'string' ? rawTimestamp : undefined,
+  };
 }
 
 /**

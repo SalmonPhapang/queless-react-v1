@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import { useTheme } from '../../theme/theme';
 import { orderService } from '../../services/orderService';
 import { authService } from '../../services/authService';
 import { Order } from '../../models/order';
-import { orderStatusFromDatabaseValue, orderStatusHelpers } from '../../models/core/statuses';
+import { canTrackOrder } from '../../models/statuses';
 import { Header } from '../../components/Header';
 import { StatusBadge } from '../../components/StatusBadge';
 import { appConfig } from '../../config/appConfig';
@@ -27,6 +27,12 @@ export const OrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const { activeOrders, listOrders } = useMemo(() => {
+    const active = orders.filter(canTrackOrder);
+    const past = orders.filter((order) => !canTrackOrder(order));
+    return { activeOrders: active, listOrders: [...active, ...past] };
+  }, [orders]);
 
   const fetchOrders = async () => {
     try {
@@ -64,13 +70,36 @@ export const OrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         </ScrollView>
       ) : (
         <FlatList
-          data={orders}
+          data={listOrders}
           keyExtractor={(item) => item.id}
           contentContainerStyle={responsiveContentStyle(layout, styles.listContent)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.secondary]} />}
+          ListHeaderComponent={
+            activeOrders.length > 0 ? (
+              <View style={[styles.activeSummary, { backgroundColor: colors.primaryContainer }]}>
+                <Ionicons name="bicycle" size={22} color={colors.secondary} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={[typography.labelSmall, { color: colors.secondary, fontWeight: '700' }]}>
+                    ACTIVE DELIVERIES
+                  </Text>
+                  <Text style={[typography.bodySmall, { color: colors.onSurface }]}>
+                    {activeOrders.length} order{activeOrders.length === 1 ? '' : 's'} on the way
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.activeTrackBtn, { backgroundColor: colors.secondary }]}
+                  onPress={() => navigation.navigate('OrderTracking', { orderId: activeOrders[0].id })}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[typography.labelMedium, { color: '#FFFFFF', fontWeight: '700' }]}>
+                    Track
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : undefined
+          }
           renderItem={({ item }) => {
-            const canonicalStatus = orderStatusFromDatabaseValue(item.status);
-            const isActive = !orderStatusHelpers.isTerminal(canonicalStatus) && canonicalStatus !== 'awaiting_payment';
+            const isActive = canTrackOrder(item);
 
             return (
               <View style={[styles.orderCard, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}>
@@ -158,6 +187,19 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
+  },
+  activeSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  activeTrackBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   orderCard: {
     borderRadius: 16,
