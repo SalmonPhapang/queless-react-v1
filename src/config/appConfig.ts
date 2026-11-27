@@ -40,9 +40,12 @@ export const appConfig = {
   env: environment,
   passwordResetRedirectUrl: 'com.queless.app://reset-password',
   paystackCallbackUrl: 'https://lxsvydiyzeavdqbjxkpp.supabase.co/functions/v1/paystack-callback',
+  // Order updates are part of the core experience. Builds can opt out with an
+  // explicit `EXPO_PUBLIC_NOTIFICATIONS_ENABLED=false`, but a missing value must
+  // not silently disable the customer's push token registration.
   enableNotifications: readFlag(
     process.env.EXPO_PUBLIC_NOTIFICATIONS_ENABLED ?? process.env.ENABLE_NOTIFICATIONS,
-    false
+    true
   ),
   push: {
     /** Audience written to `app_id` on both Expo and Web Push token rows. */

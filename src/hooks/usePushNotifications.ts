@@ -6,6 +6,10 @@ import { appConfig } from '../config/appConfig';
 import { supabase } from '../config/supabaseClient';
 import { emitPushReceived } from '../services/pushEvents';
 import {
+  showLocalOrderNotification,
+  startNotificationRealtime,
+} from '../services/notificationRealtimeService';
+import {
   onWebPushMessage,
   syncWebPushSubscription,
   unsubscribeFromWebPush,
@@ -13,6 +17,7 @@ import {
 import { handleNotificationData, handleNotificationUrl } from '../utils/notificationLinks';
 
 const CUSTOMER_PUSH_TOKEN_KEY = 'queless_customer_push_token';
+let customerExpoTokenRegistered = false;
 
 /**
  * Single owner of the notification lifecycle:
@@ -67,6 +72,7 @@ async function registerExpoToken(userId: string): Promise<void> {
       return;
     }
     await AsyncStorage.setItem(CUSTOMER_PUSH_TOKEN_KEY, data);
+    customerExpoTokenRegistered = true;
   } catch (error) {
     console.warn('Could not register Expo push token:', error);
   }
@@ -102,18 +108,30 @@ async function removeExpoToken(userId: string): Promise<void> {
   }
 
   await AsyncStorage.removeItem(CUSTOMER_PUSH_TOKEN_KEY);
+  customerExpoTokenRegistered = false;
 }
 
 export function usePushNotifications(): void {
   useEffect(() => {
     let disposed = false;
     let signedInUserId: string | null = null;
+    let stopNotificationRealtime: (() => void) | null = null;
     const disposers: Array<() => void> = [];
 
     const syncForUser = (userId: string | null) => {
       if (disposed) return;
       signedInUserId = userId;
+      stopNotificationRealtime?.();
+      stopNotificationRealtime = null;
       if (!userId) return;
+
+      stopNotificationRealtime = startNotificationRealtime(userId, (row) => {
+        emitPushReceived();
+        // Remote Expo/Web Push owns the visible alert when a token exists.
+        // This is the fallback for permission-denied or Expo Go builds.
+        if (!customerExpoTokenRegistered) void showLocalOrderNotification(row);
+      });
+
       if (Platform.OS === 'web') {
         void syncWebPushSubscription();
       } else {
@@ -124,6 +142,9 @@ export function usePushNotifications(): void {
     const revokeForUser = (userId: string | null) => {
       const id = userId || signedInUserId;
       signedInUserId = null;
+      stopNotificationRealtime?.();
+      stopNotificationRealtime = null;
+      customerExpoTokenRegistered = false;
       if (Platform.OS === 'web') {
         void unsubscribeFromWebPush(id ?? undefined);
       } else if (id) {
@@ -177,6 +198,7 @@ export function usePushNotifications(): void {
 
     return () => {
       disposed = true;
+      stopNotificationRealtime?.();
       disposers.forEach((dispose) => dispose());
     };
   }, []);

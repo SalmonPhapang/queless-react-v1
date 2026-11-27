@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/theme';
 import { notificationInboxService } from '../../services/notificationInboxService';
@@ -16,7 +17,7 @@ export const NotificationInboxScreen: React.FC<{ navigation: any }> = ({ navigat
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchNotifs = async () => {
+  const fetchNotifs = useCallback(async () => {
     try {
       const user = await authService.getCurrentSessionUser();
       if (!user?.id) {
@@ -28,13 +29,15 @@ export const NotificationInboxScreen: React.FC<{ navigation: any }> = ({ navigat
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchNotifs();
   }, []);
 
-  useEffect(() => onPushReceived(() => void fetchNotifs()), []);
+  useFocusEffect(
+    useCallback(() => {
+      void fetchNotifs();
+    }, [fetchNotifs]),
+  );
+
+  useEffect(() => onPushReceived(() => void fetchNotifs()), [fetchNotifs]);
 
   const onRefresh = async () => {
     setRefreshing(true);

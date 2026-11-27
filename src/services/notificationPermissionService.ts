@@ -1,5 +1,6 @@
 import type * as NotificationsTypes from 'expo-notifications';
 import { Platform } from 'react-native';
+import { appConfig } from '../config/appConfig';
 import { supabase } from '../config/supabaseClient';
 import { getNotificationsModule } from '../utils/nativeNotifications';
 import { subscribeToWebPush, unsubscribeFromWebPush } from './webPushService';
@@ -86,7 +87,11 @@ export const notificationPermissionService = {
       .from('user_fcm_tokens')
       .delete()
       .eq('user_id', data.user.id)
-      .eq('provider', 'expo');
+      .eq('provider', 'expo')
+      // Admin/driver profiles can share a Supabase user id. Only remove the
+      // customer audience so signing out of the customer app cannot revoke a
+      // driver's delivery-alert token.
+      .eq('app_id', appConfig.push.appId);
     if (error) console.warn('Could not remove Expo push token:', error.message);
   },
 };
