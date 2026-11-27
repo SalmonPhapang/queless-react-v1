@@ -13,6 +13,8 @@ import {
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
+import { useDeliveryCompletion } from './src/hooks/useDeliveryCompletion';
+import { DeliveryGratitudeModal } from './src/components/DeliveryGratitudeModal';
 import { flushPendingAuthDeepLink, handleAuthDeepLink } from './src/utils/deepLinks';
 import { flushPendingNotificationTap, handleCurrentNotificationUrl } from './src/utils/notificationLinks';
 
@@ -49,6 +51,7 @@ function useFullscreen() {
 const Root: React.FC = () => {
   const { colors, isDark } = useTheme();
   usePushNotifications();
+  const { completion, dismiss } = useDeliveryCompletion();
 
   useEffect(() => {
     handleCurrentNotificationUrl();
@@ -90,6 +93,7 @@ const Root: React.FC = () => {
       <StatusBar hidden style="light" />
       {NavigationBarComponent ? <NavigationBarComponent hidden /> : null}
       <AppNavigator />
+      <DeliveryGratitudeModal completion={completion} onDismiss={dismiss} />
     </NavigationContainer>
   );
 };

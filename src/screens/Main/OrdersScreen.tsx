@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ScrollView,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { responsiveContentStyle, useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useTheme } from '../../theme/theme';
@@ -15,6 +16,8 @@ import { orderService } from '../../services/orderService';
 import { authService } from '../../services/authService';
 import { Order } from '../../models/order';
 import { canTrackOrder } from '../../models/statuses';
+import { activeDeliveryNavigation, partitionOrders } from '../../utils/deliveryFlow';
+import { onDeliveryCompleted } from '../../services/deliveryCompletionService';
 import { Header } from '../../components/Header';
 import { StatusBadge } from '../../components/StatusBadge';
 import { appConfig } from '../../config/appConfig';
@@ -28,13 +31,12 @@ export const OrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const { activeOrders, listOrders } = useMemo(() => {
-    const active = orders.filter(canTrackOrder);
-    const past = orders.filter((order) => !canTrackOrder(order));
-    return { activeOrders: active, listOrders: [...active, ...past] };
-  }, [orders]);
+  // Delivered orders stay in `pastOrders`; only the active tracking list is
+  // filtered by status. Refreshing on focus and on completion keeps a just
+  // finished delivery visible immediately after the driver marks it delivered.
+  const { activeOrders, listOrders } = partitionOrders(orders);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const currentUser = await authService.getCurrentSessionUser();
       if (currentUser) {
@@ -46,11 +48,17 @@ export const OrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchOrders();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchOrders();
+    }, [fetchOrders]),
+  );
+
+  useEffect(() => onDeliveryCompleted(() => {
+    void fetchOrders();
+  }), [fetchOrders]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -88,11 +96,18 @@ export const OrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 </View>
                 <TouchableOpacity
                   style={[styles.activeTrackBtn, { backgroundColor: colors.secondary }]}
-                  onPress={() => navigation.navigate('OrderTracking', { orderId: activeOrders[0].id })}
+                  onPress={() => {
+                    const target = activeDeliveryNavigation(activeOrders);
+                    if (target.kind === 'order') {
+                      navigation.navigate('OrderTracking', { orderId: target.orderId });
+                    } else {
+                      navigation.navigate('OrdersTab');
+                    }
+                  }}
                   activeOpacity={0.85}
                 >
                   <Text style={[typography.labelMedium, { color: '#FFFFFF', fontWeight: '700' }]}>
-                    Track
+                    {activeOrders.length === 1 ? 'Track' : 'View all'}
                   </Text>
                 </TouchableOpacity>
               </View>

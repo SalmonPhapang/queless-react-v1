@@ -52,6 +52,7 @@ import { addProductToCart } from '../../utils/cartActions';
 import { getStoreDistanceKm } from '../../utils/deliveryRadius';
 import { authService } from '../../services/authService';
 import { cleanText, formatAddress } from '../../utils/address';
+import { activeDeliveryNavigation } from '../../utils/deliveryFlow';
 
 const DEFAULT_CUISINES = ['All', 'Fast Food', 'Pizza', 'Burgers', 'Asian', 'Desserts'];
 
@@ -529,7 +530,14 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 styles.activeDeliveryCard,
                 { backgroundColor: colors.cardBackground, borderColor: colors.secondary },
               ]}
-              onPress={() => navigation.navigate('OrderTracking', { orderId: activeOrders[0].id })}
+              onPress={() => {
+                const target = activeDeliveryNavigation(activeOrders);
+                if (target.kind === 'order') {
+                  navigation.navigate('OrderTracking', { orderId: target.orderId });
+                } else {
+                  navigation.navigate('OrdersTab');
+                }
+              }}
               activeOpacity={0.9}
             >
               <View style={[styles.activeDeliveryIcon, { backgroundColor: colors.primaryContainer }]}>
@@ -546,9 +554,11 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                   {orderStatusMeta[activeOrders[0].status]?.displayName || activeOrders[0].status}
                 </Text>
                 <Text style={[typography.bodySmall, { color: colors.subtext }]} numberOfLines={1}>
-                  {activeOrders[0].driver?.name
-                    ? `Driver ${activeOrders[0].driver.name} · tap to track`
-                    : 'Finding your driver · tap to track'}
+                  {activeOrders.length > 1
+                    ? 'Tap to view all deliveries'
+                    : activeOrders[0].driver?.name
+                      ? `Driver ${activeOrders[0].driver.name} · tap to track`
+                      : 'Finding your driver · tap to track'}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.secondary} />

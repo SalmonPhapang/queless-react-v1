@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
 } from '../../models/core/statuses';
 import { formatAddress } from '../../utils/address';
 import { Skeleton } from '../../components/Skeleton';
+import { emitDeliveryCompleted } from '../../services/deliveryCompletionService';
 
 const POLL_INTERVAL_MS = 20_000;
 const DRIVER_FIX_MAX_AGE_MS = 5 * 60 * 1000;
@@ -68,6 +69,17 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
   const [liveFix, setLiveFix] = useState<DriverLocationFix | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastStatusRef = useRef<string | null>(null);
+
+  // Celebrate a live transition to delivered, but never on first load of an
+  // order that was already delivered before the screen opened.
+  const noteStatus = useCallback((next: Order) => {
+    const previous = lastStatusRef.current;
+    if (previous && previous !== 'delivered' && next.status === 'delivered') {
+      emitDeliveryCompleted(next);
+    }
+    lastStatusRef.current = next.status;
+  }, []);
 
   // Delivered/cancelled/refunded orders have nothing left to track live.
   const orderIsTerminal = !!order && orderStatusHelpers.isTerminal(order.status);
@@ -89,6 +101,7 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
 
     const data = await orderService.getOrderById(orderId);
     if (data) {
+      noteStatus(data);
       setOrder(data);
       setLiveFix(
         data.driverId && !orderStatusHelpers.isTerminal(data.status)
@@ -100,7 +113,7 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
       setError('We could not find this order. It may have been removed.');
     }
     setLoading(false);
-  }, [orderId]);
+  }, [noteStatus, orderId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +128,7 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
 
     const unsubscribe = orderService.subscribeToOrderUpdates(orderId, (updated) => {
       if (cancelled) return;
+      noteStatus(updated);
       setOrder(updated);
       if (updated.driverId && !orderStatusHelpers.isTerminal(updated.status)) {
         void orderService.getLiveDriverLocation(updated.driverId).then((fix) => {
@@ -135,7 +149,7 @@ export const OrderTrackingScreen: React.FC<{ navigation: any; route: any }> = ({
       unsubscribe();
       clearInterval(interval);
     };
-  }, [fetchOrder, orderId, orderIsTerminal]);
+  }, [fetchOrder, noteStatus, orderId, orderIsTerminal]);
 
   useEffect(() => {
     if (!order?.driverId || orderIsTerminal) return;
